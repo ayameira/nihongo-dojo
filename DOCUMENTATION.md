@@ -1,14 +1,13 @@
 # Nihongo Dojo - Technical Documentation
 
-**Version:** 0.1.0
-**Package ID:** com.nihongodojo.app
-**Status:** Early Development
+**Version:** 0.2.0
+**Status:** Active Development
 
 ---
 
 ## Overview
 
-Nihongo Dojo is a personalized Japanese language tutor desktop application built with Tauri. It provides an interactive chat-based interface for Japanese language practice with the ability to reference and leverage users' existing Anki flashcard study data (particularly Wanikani decks and Japanese language decks).
+Nihongo Dojo is a personalized Japanese language tutor web application. It provides an interactive chat-based interface for Japanese language practice powered by Google Gemini AI, with the ability to reference and leverage users' existing Anki flashcard study data (particularly WaniKani decks and Japanese language decks).
 
 ---
 
@@ -21,20 +20,16 @@ Nihongo Dojo is a personalized Japanese language tutor desktop application built
 | TypeScript | ^5.0.0 | Type-safe JavaScript |
 | Vite | ^5.0.0 | Build tool and dev server |
 | Tailwind CSS | ^3.4.3 | Utility-first CSS framework |
-| PostCSS | ^8.4.38 | CSS processing |
+| react-markdown | ^9.0.0 | Markdown rendering |
 
-### Backend/Desktop
+### Backend
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| Tauri | ^2.0.0 | Desktop app framework (Rust backend + web frontend) |
-| Rust | Edition 2021 | Backend runtime |
-| tauri-plugin-shell | ^2.0.0 | Shell command execution |
-| Serde | ^1 | JSON serialization |
-
-### Python Utilities
-| Library | Purpose |
-|---------|---------|
-| sqlite3 | Anki database integration |
+| FastAPI | 0.115.* | Python async web framework |
+| SQLAlchemy | 2.0.* | Async ORM |
+| aiosqlite | 0.20.* | Async SQLite driver |
+| Google Gemini | 2.0-flash | LLM for chat |
+| Pydantic | 2.0.* | Data validation |
 
 ---
 
@@ -44,319 +39,319 @@ Nihongo Dojo is a personalized Japanese language tutor desktop application built
 nihongo-dojo/
 ├── src/                          # React/TypeScript frontend
 │   ├── main.tsx                  # React entry point
-│   ├── App.tsx                   # Main application component
+│   ├── App.tsx                   # Main application layout
+│   ├── index.css                 # Tailwind CSS styles
 │   ├── components/
-│   │   └── Chat.tsx              # Chat UI component (core interface)
-│   ├── index.css                 # Tailwind CSS directives
-│   └── vite-env.d.ts             # TypeScript environment definitions
+│   │   ├── Chat.tsx              # Chat interface
+│   │   ├── VocabSidebar.tsx      # Vocabulary sidebar with Anki settings
+│   │   └── CostDashboard.tsx     # Usage/cost tracking modal
+│   ├── hooks/
+│   │   └── useChat.ts            # Chat state management hook
+│   └── utils/
+│       └── streamReader.ts       # SSE stream parser
 │
-├── src-tauri/                    # Rust backend (Tauri)
-│   ├── src/
-│   │   ├── main.rs               # Rust entry point
-│   │   └── lib.rs                # Tauri application setup
-│   ├── Cargo.toml                # Rust dependencies
-│   ├── tauri.conf.json           # Tauri configuration
-│   ├── capabilities/
-│   │   └── default.json          # Security capabilities
-│   └── build.rs                  # Rust build script
+├── backend/                      # FastAPI backend
+│   ├── app/
+│   │   ├── main.py               # FastAPI app with lifespan events
+│   │   ├── config.py             # Pydantic settings
+│   │   ├── api/
+│   │   │   ├── chat.py           # Streaming chat endpoint
+│   │   │   ├── vocab.py          # Vocabulary CRUD endpoints
+│   │   │   ├── notes.py          # CLASS_NOTES.md management
+│   │   │   ├── telemetry.py      # Token usage tracking
+│   │   │   └── config.py         # Anki path configuration
+│   │   ├── core/
+│   │   │   ├── gemini_client.py  # Gemini API wrapper
+│   │   │   ├── tools.py          # Tool definitions for Gemini
+│   │   │   ├── context_builder.py # System prompt builder
+│   │   │   └── streaming.py      # SSE streaming utilities
+│   │   ├── db/
+│   │   │   ├── database.py       # SQLAlchemy async setup
+│   │   │   └── models.py         # Database models
+│   │   └── services/
+│   │       ├── anki_sync.py      # Anki collection export
+│   │       ├── anki_importer.py  # Import Anki data to app DB
+│   │       ├── notes_service.py  # Notes file management
+│   │       ├── vocab_service.py  # Vocabulary queries
+│   │       └── token_tracker.py  # Token usage logging
+│   ├── requirements.txt          # Python dependencies
+│   ├── config.json               # Runtime configuration (Anki path)
+│   └── .env                      # Environment variables
 │
 ├── Configuration Files
 │   ├── package.json              # Node.js dependencies & scripts
-│   ├── vite.config.ts            # Vite build configuration
+│   ├── vite.config.ts            # Vite with API proxy
 │   ├── tsconfig.json             # TypeScript configuration
-│   ├── tsconfig.node.json        # TypeScript config for Vite
 │   ├── tailwind.config.js        # Tailwind CSS configuration
 │   └── postcss.config.js         # PostCSS configuration
 │
-├── Python Utilities
-│   ├── export_anki_to_sqlite.py  # Anki data export script
-│   ├── explore_anki.py           # Anki database exploration tool
-│   └── DB-README.md              # Database documentation
-│
 ├── Data Files
-│   ├── anki_export.db            # Exported Anki data (SQLite)
-│   └── collection.anki2          # Original Anki collection
+│   ├── CLASS_NOTES.md            # Persistent study notes
+│   └── anki_export.db            # Exported Anki data (auto-generated)
 │
-├── index.html                    # HTML entry point
-└── package-lock.json             # NPM dependency lock
+└── index.html                    # HTML entry point
 ```
 
 ---
 
-## Component Documentation
+## Architecture
 
-### Frontend Components
+### Request Flow
 
-#### `src/main.tsx` - React Entry Point
-- Mounts the React application to the DOM root element
-- Initializes React 18 StrictMode for development checks
-- Loads global CSS styles
-
-#### `src/App.tsx` - Main Application Component
-**Purpose:** Orchestrates message flow between UI and backend
-
-**Responsibilities:**
-- Manages `blackboardContent` state for study notes
-- Handles `onSendMessage` callback for backend integration
-- Currently uses mock implementation with simulated delays
-
-**State:**
-```typescript
-blackboardContent: string  // Content for the study notes "blackboard" view
+```
+Browser (React)
+    ↓ HTTP/SSE
+Vite Dev Server (proxy /api → :8000)
+    ↓
+FastAPI Backend
+    ├── Gemini API (streaming chat)
+    ├── SQLite Database (vocab, messages, tokens)
+    └── File System (CLASS_NOTES.md)
 ```
 
-**Props passed to Chat:**
-```typescript
-{
-  onSendMessage: (message: string, image?: string) => Promise<string>;
-  blackboardContent: string;
-}
-```
+### Key Features
 
-#### `src/components/Chat.tsx` - Chat Interface Component
-**Purpose:** The core UI interface for user-LLM interaction
-
-**Features:**
-- Message history display with distinct user/assistant styling
-- Image attachment support (file upload and clipboard paste)
-- Tab-based navigation (Chat / Blackboard views)
-- Loading states with vocabulary check and typing indicators
-- Auto-scroll to latest messages
-
-**Props Interface:**
-```typescript
-interface ChatProps {
-  onSendMessage?: (message: string, image?: string) => Promise<string>;
-  blackboardContent?: string;
-}
-```
-
-**UI Characteristics:**
-- Blue chat bubbles for user messages
-- White bubbles with borders for assistant messages
-- Responsive layout (max 80% width, centered)
-- Two-phase loading animation (vocabulary check → typing indicator)
-
-### Backend Components
-
-#### `src-tauri/src/lib.rs` - Tauri Application Setup
-- Initializes the Tauri application builder
-- Loads the shell plugin for subprocess execution
-- Generates application context from configuration
-- Ready for Tauri command implementations
-
-#### `src-tauri/src/main.rs` - Rust Entry Point
-- Entry point that calls `run()` from lib.rs
-- Windows-specific: Prevents additional console window in release builds
+1. **Streaming Chat**: Server-Sent Events for real-time response streaming
+2. **Tool Calling**: Gemini can save vocabulary, update notes, adjust difficulty
+3. **Anki Integration**: Automatic sync from Anki collection on server start
+4. **Cost Tracking**: Token usage and spending limits
 
 ---
 
-## Anki Data Integration
+## API Endpoints
 
-### Purpose
-Extracts Japanese language study data from Anki (specifically Wanikani and Japanese decks) into a SQLite database accessible to the LLM backend.
+### Chat
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/chat/stream` | Streaming chat with SSE |
 
-### Export Process (`export_anki_to_sqlite.py`)
-1. Copies live Anki collection to temporary database (avoids file locks)
-2. Queries target decks matching patterns: `japanese%` or `%Wanikani%`
-3. Extracts card data with review statistics
+### Vocabulary
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/vocab` | List vocabulary with filtering |
+| GET | `/api/vocab/stats` | Get vocabulary counts by status |
+| GET | `/api/vocab/learning` | Get learning vocabulary |
+| POST | `/api/vocab/import-anki` | Import from Anki export |
 
-### Database Schema (`anki_export.db`)
+### Notes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/notes` | Get CLASS_NOTES.md content |
+| PUT | `/api/notes` | Update CLASS_NOTES.md |
+
+### Configuration
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/config/anki-path` | Get Anki collection path |
+| PUT | `/api/config/anki-path` | Set Anki collection path |
+| POST | `/api/config/sync-anki` | Trigger manual Anki sync |
+
+### Telemetry
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/telemetry/limit` | Get spending info |
+| GET | `/api/telemetry/usage` | Get detailed usage stats |
+
+---
+
+## Database Schema
+
+### VocabEntry
 ```sql
-CREATE TABLE notes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    anki_note_id INTEGER,           -- Original Anki note ID
-    deck_name TEXT,                 -- Source deck name
-    model_name TEXT,                -- Card template/model name
-    fields JSON,                    -- Full card field data
-    tags TEXT,                      -- Comma-separated tags
-    interval INTEGER,               -- Days until next review
-    reps INTEGER,                   -- Number of repetitions
-    lapses INTEGER,                 -- Number of lapses/failures
-    status TEXT,                    -- Card status (see below)
-    characters TEXT                 -- Main character/word
+CREATE TABLE vocab_entries (
+    id INTEGER PRIMARY KEY,
+    kanji TEXT,                    -- Kanji representation (nullable)
+    kana TEXT NOT NULL,            -- Kana reading
+    meaning TEXT,                  -- English meaning
+    pos TEXT,                      -- Part of speech
+    status TEXT DEFAULT 'New',     -- New, Learning, Mature, Suspended
+    source TEXT DEFAULT 'manual',  -- manual, anki, chat
+    anki_note_id INTEGER,          -- Link to Anki note
+    interval_days INTEGER,         -- Anki interval
+    times_seen INTEGER DEFAULT 0,
+    times_correct INTEGER DEFAULT 0,
+    last_seen_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
 );
 ```
 
-### Card Status Values
-| Status | Condition |
-|--------|-----------|
-| `Suspended` | queue < 0 |
-| `New` | type = 0 or queue = 0 |
-| `Learning` | type = 1 or type = 3 |
-| `Mature` | type = 2 and interval >= 21 |
-| `Young` | type = 2 and interval < 21 |
-
-### Field Extraction Priority
-The `characters` field is extracted by looking for (in order):
-1. 'Characters', 'vocab', 'katakana', 'Word'
-2. 'Front', 'Frente', 'Texto'
-3. First field as fallback
+### TokenLog
+```sql
+CREATE TABLE token_logs (
+    id INTEGER PRIMARY KEY,
+    session_id TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    cost_usd REAL,
+    created_at TIMESTAMP
+);
+```
 
 ---
 
-## Configuration
+## Anki Integration
 
-### Tauri Configuration (`tauri.conf.json`)
+### Automatic Sync on Startup
+
+When the server starts, it automatically:
+1. Reads the Anki collection path from `config.json`
+2. Copies the Anki database to avoid lock conflicts
+3. Exports vocabulary and kanji to `anki_export.db`
+4. Imports into the app database, updating existing entries
+
+### Supported Card Types
+- **Vocabulary**: Words with kanji, reading, meaning
+- **Kanji**: Individual kanji with readings and meanings
+
+### Card Status Mapping
+| Anki Status | App Status |
+|-------------|------------|
+| queue < 0 | Suspended |
+| type = 0 or queue = 0 | New |
+| type = 1 or 3 | Learning |
+| type = 2, interval >= 21 | Mature |
+| type = 2, interval < 21 | Learning |
+
+### Configuring Anki Path
+
+The Anki collection path can be configured via:
+1. **UI**: Click the gear icon in the Vocabulary sidebar
+2. **API**: `PUT /api/config/anki-path`
+3. **File**: Edit `backend/config.json`
+
+Default path: `~/Library/Application Support/Anki2/User 1/collection.anki2`
+
+---
+
+## Development
+
+### Prerequisites
+- Node.js 18+
+- Python 3.11+
+- Anki (optional, for vocabulary sync)
+
+### Setup
+
+```bash
+# Install frontend dependencies
+npm install
+
+# Setup backend
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your GEMINI_API_KEY
+```
+
+### Running
+
+```bash
+# Start both frontend and backend
+npm run dev
+
+# Or separately:
+npm run dev:frontend  # Vite on :5173
+npm run dev:backend   # FastAPI on :8000
+```
+
+### Environment Variables
+
+```env
+# Required
+GEMINI_API_KEY=your_api_key_here
+
+# Optional
+GEMINI_MODEL=gemini-2.0-flash
+DATABASE_URL=sqlite+aiosqlite:///./nihongo_dojo.db
+CLASS_NOTES_PATH=../CLASS_NOTES.md
+COST_LIMIT_WEEKLY=10.0
+```
+
+---
+
+## Gemini Tool Calling
+
+The AI tutor has access to these tools:
+
+### save_vocab
+Saves new vocabulary to the database when teaching.
 ```json
 {
-  "productName": "nihongo-dojo",
-  "version": "0.1.0",
-  "identifier": "com.nihongodojo.app",
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
-    "devUrl": "http://localhost:1420",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "windows": [{
-      "title": "Nihongo Dojo",
-      "width": 800,
-      "height": 600
-    }]
-  }
+  "kanji": "食べる",
+  "kana": "たべる",
+  "meaning": "to eat",
+  "pos": "verb"
 }
 ```
 
-### TypeScript Configuration (`tsconfig.json`)
-- Target: ES2020
-- Strict mode enabled
-- JSX: react-jsx (new transform)
-- Module resolution: bundler
-
-### Vite Configuration (`vite.config.ts`)
-- React plugin with Fast Refresh
-- Development server on port 1420 (Tauri standard)
-- Excludes `src-tauri` directory from file watching
-
----
-
-## Development Workflow
-
-### NPM Scripts
-```bash
-npm run dev        # Start Vite dev server on :1420
-npm run build      # TypeScript compilation + Vite production build
-npm run preview    # Preview production build
-npm run tauri      # Access Tauri CLI commands
+### update_notes
+Updates CLASS_NOTES.md with study notes.
+```json
+{
+  "content": "# Today's Lesson\n- Learned て-form..."
+}
 ```
 
-### Tauri Development
-```bash
-# Development with hot reload
-npm run tauri dev
-
-# Production build (creates native app bundle)
-npm run tauri build
+### adjust_difficulty
+Responds to user difficulty feedback.
+```json
+{
+  "direction": "easier"
+}
 ```
 
-### Build Outputs
-| Type | Location |
-|------|----------|
-| Frontend | `dist/` |
-| Rust backend | `src-tauri/target/{debug,release}` |
-| App bundle | `src-tauri/target/release/bundle/` |
-
 ---
 
-## Security Configuration
+## Frontend Components
 
-### Tauri Capabilities (`src-tauri/capabilities/default.json`)
-- `core:default` - Basic Tauri permissions
-- `shell:allow-open` - Permission to open URLs/files via shell
+### Chat.tsx
+Main chat interface with:
+- Message history with markdown rendering
+- Image attachment support (paste or file)
+- Streaming response display
+- Difficulty feedback buttons
+- Tab switching (Chat / Notes)
+- Spending progress bar
 
-### Notes
-- CSP (Content Security Policy) is currently set to `null` (permissive)
-- Future hardening recommended for production
+### VocabSidebar.tsx
+Vocabulary browser with:
+- Learning/Mature/New sections
+- Search functionality
+- Vocabulary detail modal
+- Anki settings modal (path config + manual sync)
 
----
-
-## Current Development Status
-
-### Completed
-- React UI with Chat interface
-- Message and image attachment handling
-- Tab-based navigation (Chat / Blackboard)
-- Loading state animations
-- Tailwind CSS styling
-- Tauri framework setup
-- TypeScript configuration
-- Anki data export system
-- SQLite database schema for study data
-
-### In Progress / Placeholder
-- Backend message processing (currently mocked)
-- LLM integration
-- Tauri command definitions
-- Blackboard persistence
-- Vocabulary checking against Anki data
-- Image processing (OCR / vision API)
-
----
-
-## Future Implementation Notes
-
-From `App.tsx`:
-> "In the future, this will communicate with the backend via Tauri commands or sidecar"
-
-### Recommended Next Steps
-1. Implement Tauri commands in Rust backend for message processing
-2. Integrate LLM API (OpenAI, Claude, or local model)
-3. Connect frontend Chat component to backend commands
-4. Implement vocabulary checking using Anki export database
-5. Persist blackboard/notes to database
-6. Implement image processing for Japanese text recognition
-7. Add error handling and retry logic
-8. Implement proper CSP for security
+### useChat Hook
+Manages chat state:
+- Message history
+- SSE stream handling
+- Loading states
+- Difficulty feedback
 
 ---
 
 ## File Summary
 
-| Category | Count | Purpose |
+| Category | Files | Purpose |
 |----------|-------|---------|
-| Frontend Source | 4 files | React/TS components and styling |
-| Backend Source | 3 files | Tauri/Rust setup |
-| Config Files | 8 files | Build, TypeScript, CSS, Tauri config |
-| Data Files | 2 files | Anki collections and exports |
-| Utilities | 2 Python scripts | Anki data processing |
+| Frontend Source | 6 files | React components and hooks |
+| Backend Source | 15 files | FastAPI app and services |
+| Config Files | 6 files | Build and runtime config |
+| Data Files | 2 files | Notes and Anki export |
 
 ---
 
-## Dependencies
+## Recent Changes (v0.2.0)
 
-### Production Dependencies
-```json
-{
-  "react": "^18.2.0",
-  "react-dom": "^18.2.0",
-  "@tauri-apps/api": "^2.0.0",
-  "@tauri-apps/plugin-shell": "^2.0.0"
-}
-```
-
-### Development Dependencies
-```json
-{
-  "@tauri-apps/cli": "^2.0.0",
-  "@types/node": "^20",
-  "@types/react": "^18.2.15",
-  "@types/react-dom": "^18.2.7",
-  "@vitejs/plugin-react": "^4.0.3",
-  "autoprefixer": "^10.4.19",
-  "postcss": "^8.4.38",
-  "tailwindcss": "^3.4.3",
-  "typescript": "^5.0.2",
-  "vite": "^5.0.0"
-}
-```
-
-### Rust Dependencies (Cargo.toml)
-```toml
-[dependencies]
-tauri = "2.0.0"
-tauri-plugin-shell = "2.0.0"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-```
+- Migrated from Tauri desktop app to browser-based web app
+- Added FastAPI backend with async SQLAlchemy
+- Integrated Google Gemini for AI chat with streaming
+- Implemented automatic Anki sync on server startup
+- Added configurable Anki path via UI settings
+- Added manual sync button in Vocabulary sidebar
+- Vocabulary sidebar now shows all statuses (Learning, Mature, New)
+- Added spending limit tracking and progress bar

@@ -2,7 +2,57 @@
 
 This document provides a detailed breakdown of all tasks required to refactor Nihongo Dojo from a Tauri desktop app to a browser-based application with a FastAPI backend.
 
-For each phase, you should create a new file REFACTOR_PHASE_X.md and add the tasks for that phase there. Describe in detail what you have done and how to test it.
+---
+
+## Completion Status (Updated 2026-01-27)
+
+### Completed Phases
+
+- **Phase 1: Project Restructure & Backend Setup** - DONE
+  - Removed Tauri dependencies
+  - Created FastAPI backend structure
+  - Configured Vite proxy for API calls
+
+- **Phase 2: Database Setup** - DONE (using SQLite instead of PostgreSQL)
+  - Created SQLAlchemy async models (VocabEntry, ChatMessage, TokenLog)
+  - Implemented async database initialization
+
+- **Phase 3: LLM Integration** - DONE
+  - Integrated Google Gemini 2.0 Flash
+  - Implemented streaming chat with SSE
+  - Created tool definitions (save_vocab, update_notes, adjust_difficulty)
+
+- **Phase 4: Frontend Refactor** - DONE
+  - Created useChat hook for state management
+  - Updated Chat.tsx with streaming support
+  - Added react-markdown for response rendering
+
+- **Phase 5: CLASS_NOTES.md System** - DONE
+  - Created notes API endpoints
+  - Integrated with Gemini tool calling
+
+- **Phase 6: Vocabulary Sidebar** - DONE
+  - Created VocabSidebar component
+  - Shows Learning/Mature/New sections
+  - Added search functionality
+  - Added Anki settings modal with path configuration
+  - Added manual sync button
+
+- **Phase 7: Cost & Token Telemetry** - DONE
+  - Created token tracking service
+  - Added spending limit display in Chat header
+  - Created telemetry API endpoints
+
+- **Phase 8: Anki Integration Improvements** - DONE
+  - Automatic Anki sync on server startup
+  - Configurable Anki collection path via UI
+  - Manual sync trigger from sidebar
+
+### Remaining Work
+
+- Production deployment configuration
+- Error handling improvements
+- Unit tests
 
 ---
 

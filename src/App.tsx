@@ -1,33 +1,66 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Chat from './components/Chat';
+import VocabSidebar from './components/VocabSidebar';
+import CostDashboard, { CostIndicator } from './components/CostDashboard';
 
 function App() {
-  const [blackboardContent, setBlackboardContent] = useState<string>("");
+  const [notesContent, setNotesContent] = useState<string>("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('nihongo_sidebar_collapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [showCostDashboard, setShowCostDashboard] = useState(false);
 
-  const handleSendMessage = async (message: string, image?: string) => {
-    // In the future, this will communicate with the backend via Tauri commands or sidecar
-    console.log("User sent:", message);
-    if (image) {
-      console.log("Image attached (length):", image.length);
+  const fetchNotes = useCallback(async () => {
+    try {
+      const response = await fetch('/api/notes');
+      if (response.ok) {
+        const data = await response.json();
+        setNotesContent(data.content);
+      }
+    } catch (error) {
+      console.error('Failed to fetch notes:', error);
     }
-    
-    // Simulating backend response for now
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    const imageAck = image ? " I also received your image!" : "";
+  }, []);
 
-    // Mock update to blackboard if user asks to "write" something
-    if (message.toLowerCase().includes("blackboard")) {
-        setBlackboardContent(prev => prev + "\n- New note added: " + message);
-    }
+  useEffect(() => {
+    fetchNotes();
+    // Refresh notes periodically
+    const interval = setInterval(fetchNotes, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotes]);
 
-    return `You said: "${message}".${imageAck} I checked the database and... (Real logic coming soon)`;
-  };
+  useEffect(() => {
+    localStorage.setItem('nihongo_sidebar_collapsed', JSON.stringify(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   return (
-    <Chat 
-      onSendMessage={handleSendMessage} 
-      blackboardContent={blackboardContent}
-    />
+    <div className="flex h-screen bg-gray-100">
+      {/* Vocabulary Sidebar */}
+      <VocabSidebar
+        isCollapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col max-w-2xl mx-auto relative">
+        {/* Cost Indicator in header area */}
+        <div className="absolute top-4 right-4 z-20">
+          <CostIndicator onClick={() => setShowCostDashboard(true)} />
+        </div>
+
+        <Chat
+          blackboardContent={notesContent}
+          onRefreshNotes={fetchNotes}
+        />
+      </main>
+
+      {/* Cost Dashboard Modal */}
+      <CostDashboard
+        isOpen={showCostDashboard}
+        onClose={() => setShowCostDashboard(false)}
+      />
+    </div>
   );
 }
 
