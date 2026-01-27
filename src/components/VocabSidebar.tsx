@@ -213,7 +213,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="w-12 bg-white border-r border-gray-200 flex flex-col items-center py-4">
+      <div className="w-full h-full bg-white border-r border-gray-200 flex flex-col items-center py-4">
         <button
           onClick={onToggle}
           className="p-2 hover:bg-gray-100 rounded-lg"
@@ -232,7 +232,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   }
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 flex flex-col h-full">
+    <div className="w-full bg-white border-r border-gray-200 flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <h2 className="font-bold text-gray-800">Vocabulary</h2>

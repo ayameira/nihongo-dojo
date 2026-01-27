@@ -25,6 +25,13 @@ async def get_notes():
     return {"content": content}
 
 
+@router.get("/token-count")
+async def get_token_count():
+    settings = get_settings()
+    count = await notes_service.get_token_count(settings.class_notes_path)
+    return {"token_count": count}
+
+
 @router.get("/{section}")
 async def get_section(section: str):
     settings = get_settings()
@@ -70,10 +77,3 @@ async def archive_notes():
         settings.notes_token_limit
     )
     return {"archived": archived}
-
-
-@router.get("/token-count")
-async def get_token_count():
-    settings = get_settings()
-    count = await notes_service.get_token_count(settings.class_notes_path)
-    return {"token_count": count}

@@ -47,8 +47,24 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--paper);
   position: relative;
+
+  /* Ukiyo-e inspired layered background */
+  background:
+    /* Soft pink cloud - upper right */
+    radial-gradient(ellipse 60% 40% at 85% 15%, rgba(219, 166, 166, 0.25) 0%, transparent 70%),
+    /* Deep red accent - lower left */
+    radial-gradient(ellipse 45% 35% at 10% 85%, rgba(139, 69, 69, 0.15) 0%, transparent 60%),
+    /* Sage green wave - mid left */
+    radial-gradient(ellipse 50% 60% at 5% 50%, rgba(107, 142, 107, 0.18) 0%, transparent 55%),
+    /* Muted green - lower right */
+    radial-gradient(ellipse 40% 45% at 90% 75%, rgba(85, 107, 85, 0.12) 0%, transparent 50%),
+    /* Soft pink wash - center top */
+    radial-gradient(ellipse 70% 30% at 50% 5%, rgba(199, 163, 163, 0.15) 0%, transparent 60%),
+    /* Charcoal ink shadow - bottom center */
+    radial-gradient(ellipse 80% 25% at 50% 100%, rgba(45, 45, 45, 0.06) 0%, transparent 50%),
+    /* Base paper */
+    var(--paper);
 }
 
 /* ===== Spending Progress Bar ===== */
@@ -1038,4 +1054,562 @@ body {
 
 .session-list::-webkit-scrollbar-thumb:hover {
   background: var(--ink-muted);
+}
+
+/* ===== Right Sidebar ===== */
+.right-sidebar {
+  background: var(--paper);
+  border-left: 1px solid var(--paper-dark);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.right-sidebar.expanded {
+  width: 240px;
+}
+
+.right-sidebar.collapsed {
+  width: 48px;
+  align-items: center;
+  padding: var(--space-sm) 0;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--paper-dark);
+}
+
+.sidebar-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.sidebar-toggle:hover {
+  background: var(--paper-dark);
+  color: var(--ink);
+}
+
+/* Budget Section */
+.budget-section {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--paper-dark);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.budget-section:hover {
+  background: var(--paper-warm);
+}
+
+.budget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-sm);
+}
+
+.budget-label {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.budget-amount {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-bar {
+  height: 8px;
+  background: var(--paper-dark);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+}
+
+.budget-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.budget-fill.progress-green {
+  background: linear-gradient(90deg, var(--jade) 0%, var(--jade-soft) 100%);
+}
+
+.budget-fill.progress-yellow {
+  background: linear-gradient(90deg, #d97706 0%, #fbbf24 100%);
+}
+
+.budget-fill.progress-red {
+  background: linear-gradient(90deg, var(--vermillion) 0%, var(--vermillion-soft) 100%);
+}
+
+.budget-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+}
+
+.budget-percent {
+  font-weight: 500;
+}
+
+/* Quote Section */
+.quote-section {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--paper-dark);
+  text-align: center;
+}
+
+.quote-jp {
+  font-family: var(--font-jp);
+  font-size: 0.9rem;
+  color: var(--ink);
+  margin-bottom: var(--space-sm);
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+}
+
+.quote-romaji {
+  font-size: 0.65rem;
+  color: var(--ink-muted);
+  font-style: italic;
+  margin-bottom: var(--space-xs);
+}
+
+.quote-en {
+  font-size: 0.75rem;
+  color: var(--ink-light);
+  font-style: italic;
+  margin-bottom: var(--space-sm);
+}
+
+.quote-attribution {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--paper-dark);
+}
+
+.quote-author {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.quote-author-en {
+  font-size: 0.65rem;
+  color: var(--ink-muted);
+  opacity: 0.85;
+}
+
+.quote-work {
+  font-size: 0.65rem;
+  color: var(--ink-muted);
+  opacity: 0.8;
+}
+
+/* Tanuki Section */
+.tanuki-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+}
+
+.tanuki-caption {
+  margin-top: var(--space-md);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* Collapsed State */
+.collapsed-tanuki {
+  margin-top: var(--space-md);
+}
+
+.mini-tanuki {
+  width: 24px;
+  height: 24px;
+  background: var(--ink-light);
+  border-radius: 50%;
+  position: relative;
+}
+
+.mini-tanuki::before,
+.mini-tanuki::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--ink-light);
+  border-radius: 50%;
+  top: -4px;
+}
+
+.mini-tanuki::before { left: 2px; }
+.mini-tanuki::after { right: 2px; }
+
+.collapsed-progress {
+  width: 6px;
+  height: 80px;
+  background: var(--paper-dark);
+  border-radius: 3px;
+  margin-top: auto;
+  margin-bottom: var(--space-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.collapsed-progress-fill {
+  width: 100%;
+  border-radius: 3px;
+  transition: height 0.5s ease;
+}
+
+/* ===== Tanuki Samurai Pixel Art ===== */
+.tanuki-container {
+  position: relative;
+  cursor: pointer;
+  padding: var(--space-md);
+}
+
+.speech-bubble {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  animation: bubble-pop 0.3s ease;
+  z-index: 10;
+}
+
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--ink);
+}
+
+@keyframes bubble-pop {
+  0% { transform: translateX(-50%) scale(0); opacity: 0; }
+  50% { transform: translateX(-50%) scale(1.1); }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+.tanuki-samurai {
+  width: 80px;
+  height: 96px;
+  position: relative;
+  transition: transform 0.1s ease;
+}
+
+.tanuki-samurai:hover {
+  transform: scale(1.05);
+}
+
+.tanuki-samurai.slash {
+  animation: slash 0.3s ease;
+}
+
+@keyframes slash {
+  0% { transform: rotate(0); }
+  25% { transform: rotate(-10deg) translateX(-5px); }
+  50% { transform: rotate(15deg) translateX(5px); }
+  100% { transform: rotate(0); }
+}
+
+/* Tanuki Body */
+.tanuki-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Leaf on head */
+.tanuki-leaf {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 10px;
+  background: var(--jade);
+  border-radius: 0 80% 0 80%;
+  transform-origin: bottom center;
+  animation: leaf-sway 3s ease-in-out infinite;
+}
+
+@keyframes leaf-sway {
+  0%, 100% { transform: translateX(-50%) rotate(-5deg); }
+  50% { transform: translateX(-50%) rotate(5deg); }
+}
+
+/* Helmet */
+.tanuki-helmet {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 20px;
+  background: var(--ink);
+  border-radius: 22px 22px 0 0;
+}
+
+.tanuki-helmet::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 12px;
+  background: var(--vermillion);
+  border-radius: 2px;
+}
+
+/* Face */
+.tanuki-face {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 36px;
+  background: #8B7355;
+  border-radius: 24px 24px 20px 20px;
+}
+
+/* Eyes */
+.tanuki-eye {
+  position: absolute;
+  width: 8px;
+  height: 10px;
+  background: var(--ink);
+  border-radius: 50%;
+  top: 10px;
+  animation: blink 4s ease-in-out infinite;
+}
+
+.tanuki-eye.left { left: 10px; }
+.tanuki-eye.right { right: 10px; }
+
+.tanuki-eye::after {
+  content: '';
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+}
+
+@keyframes blink {
+  0%, 45%, 55%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.1); }
+}
+
+/* Nose */
+.tanuki-nose {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 6px;
+  background: var(--ink);
+  border-radius: 50%;
+}
+
+/* Sweat drop for danger state */
+.tanuki-sweat {
+  position: absolute;
+  top: 5px;
+  right: 2px;
+  width: 6px;
+  height: 10px;
+  background: #87CEEB;
+  border-radius: 50% 50% 50% 50% / 30% 30% 70% 70%;
+  animation: sweat-drop 1s ease-in-out infinite;
+}
+
+@keyframes sweat-drop {
+  0%, 100% { opacity: 1; transform: translateY(0); }
+  50% { opacity: 0.5; transform: translateY(3px); }
+}
+
+/* Ears */
+.tanuki-ear {
+  position: absolute;
+  top: 20px;
+  width: 14px;
+  height: 14px;
+  background: #8B7355;
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.tanuki-ear.left { left: 8px; }
+.tanuki-ear.right { right: 8px; }
+
+.tanuki-ear::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #D4A574;
+  border-radius: 50%;
+  top: 3px;
+  left: 3px;
+}
+
+/* Armor */
+.tanuki-armor {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 28px;
+  background: var(--ink);
+  border-radius: 4px;
+}
+
+.tanuki-armor::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 8px;
+  background: var(--vermillion);
+  border-radius: 2px;
+}
+
+.tanuki-armor::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 6px;
+  background: #333;
+  border-radius: 2px;
+}
+
+/* Katana */
+.tanuki-katana {
+  position: absolute;
+  top: 50px;
+  left: 0;
+  width: 6px;
+  height: 36px;
+  background: linear-gradient(to bottom, #C0C0C0 0%, #E8E8E8 50%, #C0C0C0 100%);
+  border-radius: 3px 3px 1px 1px;
+  transform-origin: top center;
+  transition: transform 0.2s ease;
+}
+
+.tanuki-katana::before {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 8px;
+  background: var(--ink);
+  border-radius: 2px;
+}
+
+.tanuki-samurai:hover .tanuki-katana {
+  transform: rotate(-20deg) translateX(-5px);
+}
+
+/* Tail */
+.tanuki-tail {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 20px;
+  height: 16px;
+  background: #8B7355;
+  border-radius: 50%;
+  animation: tail-wag 2s ease-in-out infinite;
+}
+
+@keyframes tail-wag {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+}
+
+/* State variations */
+.tanuki-samurai.warning .tanuki-eye {
+  animation: blink 2s ease-in-out infinite;
+}
+
+.tanuki-samurai.danger .tanuki-face {
+  animation: worry 0.5s ease-in-out infinite;
+}
+
+@keyframes worry {
+  0%, 100% { transform: translateX(-50%); }
+  25% { transform: translateX(-50%) translateX(-1px); }
+  75% { transform: translateX(-50%) translateX(1px); }
+}
+
+/* Breathing animation */
+.tanuki-body {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.02); }
 }

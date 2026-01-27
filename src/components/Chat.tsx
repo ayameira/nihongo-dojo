@@ -9,13 +9,6 @@ interface ChatProps {
   sessionId: string | null;
 }
 
-interface LimitInfo {
-  spent: number;
-  limit: number;
-  remaining: number;
-  period: string;
-}
-
 const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => {
   const getActionText = () => {
     switch (action.type) {
@@ -57,51 +50,10 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'blackboard'>('chat');
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const [limitInfo, setLimitInfo] = useState<LimitInfo | null>(null);
-  const [sessionSpent, setSessionSpent] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Fetch spending limit info
-  useEffect(() => {
-    const fetchLimit = async () => {
-      try {
-        const response = await fetch('/api/telemetry/limit');
-        if (response.ok) {
-          const data = await response.json();
-          setLimitInfo(data);
-        }
-      } catch (error) {
-        // Silently fail
-      }
-    };
-
-    fetchLimit();
-    const interval = setInterval(fetchLimit, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Track session spending from lastUsage
-  useEffect(() => {
-    if (lastUsage) {
-      setSessionSpent(prev => prev + lastUsage.cost_usd);
-    }
-  }, [lastUsage]);
-
-  // Calculate total spent: use API value or session tracking, whichever is higher
-  const totalSpent = limitInfo
-    ? Math.max(limitInfo.spent, sessionSpent)
-    : sessionSpent;
-  const weeklyLimit = limitInfo?.limit || 10;
-  const spentPercentage = (totalSpent / weeklyLimit) * 100;
-
-  const getProgressColor = () => {
-    if (spentPercentage < 50) return 'progress-green';
-    if (spentPercentage < 80) return 'progress-yellow';
-    return 'progress-red';
-  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -265,20 +217,6 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
 
   return (
     <div className="chat-container">
-      {/* Spending Progress Bar */}
-      <div
-        className="spending-bar-container"
-        title={`$${totalSpent.toFixed(4)} / $${weeklyLimit.toFixed(2)} this week`}
-      >
-        <div
-          className={`spending-bar-fill ${getProgressColor()}`}
-          style={{ width: `${Math.min(Math.max(spentPercentage, totalSpent > 0 ? 0.5 : 0), 100)}%` }}
-        />
-        <span className="spending-bar-label">
-          ${totalSpent.toFixed(4)} / ${weeklyLimit.toFixed(2)}
-        </span>
-      </div>
-
       {/* Header */}
       <header className="chat-header">
         <div className="header-left">
