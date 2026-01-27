@@ -24,7 +24,8 @@ async def generate_stream(request: ChatRequest, settings):
     from app.core.context_builder import build_context
     from app.core.tools import execute_tool_call
     from app.db.database import async_session_maker
-    from app.db.models import ChatMessage, TokenLog
+    from app.db.models import ChatMessage, TokenLog, ChatSession
+    from sqlalchemy import select
 
     if not settings.gemini_api_key:
         yield f"data: {json.dumps({'type': 'error', 'content': 'Gemini API key not configured'})}\n\n"
@@ -60,6 +61,26 @@ async def generate_stream(request: ChatRequest, settings):
 
         # Save to database
         async with async_session_maker() as session:
+            # Get or create ChatSession
+            stmt = select(ChatSession).where(ChatSession.id == request.session_id)
+            result = await session.execute(stmt)
+            chat_session = result.scalar_one_or_none()
+
+            if not chat_session:
+                # Create new session with preview from first message
+                preview = request.message[:100] if request.message else None
+                chat_session = ChatSession(
+                    id=request.session_id,
+                    preview=preview,
+                    message_count=0,
+                )
+                session.add(chat_session)
+
+            # Update session metadata
+            chat_session.message_count += 2  # user + assistant
+            from datetime import datetime
+            chat_session.updated_at = datetime.now()
+
             # Save user message
             user_msg = ChatMessage(
                 session_id=request.session_id,

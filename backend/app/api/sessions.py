@@ -1,0 +1,120 @@
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from sqlalchemy import select, delete, func
+from datetime import datetime
+
+from app.db.database import get_session
+from app.db.models import ChatSession, ChatMessage
+
+router = APIRouter()
+
+
+class SessionCreate(BaseModel):
+    id: Optional[str] = None
+
+
+class SessionUpdate(BaseModel):
+    name: str
+
+
+class SessionResponse(BaseModel):
+    id: str
+    name: Optional[str]
+    preview: Optional[str]
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("")
+async def list_sessions(session=Depends(get_session)) -> list[SessionResponse]:
+    """List all sessions ordered by most recently updated."""
+    stmt = select(ChatSession).order_by(ChatSession.updated_at.desc())
+    result = await session.execute(stmt)
+    sessions = result.scalars().all()
+    return [SessionResponse.model_validate(s) for s in sessions]
+
+
+@router.post("")
+async def create_session(
+    data: SessionCreate,
+    session=Depends(get_session)
+) -> SessionResponse:
+    """Create a new chat session."""
+    import secrets
+
+    session_id = data.id or f"session_{int(datetime.now().timestamp() * 1000)}_{secrets.token_hex(4)}"
+
+    chat_session = ChatSession(
+        id=session_id,
+        name=None,
+        preview=None,
+        message_count=0,
+    )
+    session.add(chat_session)
+    await session.commit()
+    await session.refresh(chat_session)
+
+    return SessionResponse.model_validate(chat_session)
+
+
+@router.get("/{session_id}")
+async def get_session_by_id(
+    session_id: str,
+    session=Depends(get_session)
+) -> SessionResponse:
+    """Get a single session by ID."""
+    stmt = select(ChatSession).where(ChatSession.id == session_id)
+    result = await session.execute(stmt)
+    chat_session = result.scalar_one_or_none()
+
+    if not chat_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return SessionResponse.model_validate(chat_session)
+
+
+@router.put("/{session_id}")
+async def update_session(
+    session_id: str,
+    data: SessionUpdate,
+    session=Depends(get_session)
+) -> SessionResponse:
+    """Update session (rename)."""
+    stmt = select(ChatSession).where(ChatSession.id == session_id)
+    result = await session.execute(stmt)
+    chat_session = result.scalar_one_or_none()
+
+    if not chat_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    chat_session.name = data.name
+    await session.commit()
+    await session.refresh(chat_session)
+
+    return SessionResponse.model_validate(chat_session)
+
+
+@router.delete("/{session_id}")
+async def delete_session(
+    session_id: str,
+    session=Depends(get_session)
+):
+    """Delete a session and all its messages."""
+    # Delete all messages for this session
+    await session.execute(
+        delete(ChatMessage).where(ChatMessage.session_id == session_id)
+    )
+
+    # Delete the session
+    await session.execute(
+        delete(ChatSession).where(ChatSession.id == session_id)
+    )
+
+    await session.commit()
+
+    return {"success": True}

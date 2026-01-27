@@ -49,3 +49,14 @@ class TokenLog(Base):
     image_count = Column(Integer, default=0)
     cost_usd = Column(Float, default=0.0)
     created_at = Column(DateTime, default=func.now())
+
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id = Column(String(50), primary_key=True)
+    name = Column(String(200), nullable=True)
+    preview = Column(String(100), nullable=True)
+    message_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

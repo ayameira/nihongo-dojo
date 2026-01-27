@@ -5,7 +5,7 @@ import logging
 
 from app.config import get_settings
 from app.db.database import init_db, close_db, get_session
-from app.api import chat, vocab, notes, telemetry, config
+from app.api import chat, vocab, notes, telemetry, config, sessions
 from app.services.anki_sync import export_anki_to_db
 from app.services.anki_importer import import_from_export_db
 
@@ -79,6 +79,7 @@ app.include_router(vocab.router, prefix="/api/vocab", tags=["vocabulary"])
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"])
 app.include_router(config.router, prefix="/api/config", tags=["config"])
+app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 
 
 @app.get("/api/health")

@@ -32,28 +32,31 @@ interface UseChatReturn {
   sendMessage: (content: string, image?: string) => Promise<void>;
   sendDifficultyFeedback: (direction: 'too_hard' | 'too_easy') => void;
   clearPendingFeedback: () => void;
-  clearHistory: () => void;
 }
 
-export function useChat(): UseChatReturn {
+export function useChat(sessionId: string | null): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingState, setLoadingState] = useState<'idle' | 'connecting' | 'streaming'>('idle');
   const [currentAction, setCurrentAction] = useState<AgentAction | null>(null);
   const [lastUsage, setLastUsage] = useState<UsageData | null>(null);
   const [pendingFeedback, setPendingFeedback] = useState<'too_hard' | 'too_easy' | null>(null);
-  const sessionIdRef = useRef<string>('');
+  const currentSessionRef = useRef<string | null>(null);
 
-  // Generate or retrieve session ID and load history
+  // Load history when sessionId changes
   useEffect(() => {
-    let sessionId = localStorage.getItem('nihongo_session_id');
     if (!sessionId) {
-      sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('nihongo_session_id', sessionId);
+      setMessages([]);
+      return;
     }
-    sessionIdRef.current = sessionId;
 
-    // Load chat history from backend
+    // Don't reload if session hasn't changed
+    if (sessionId === currentSessionRef.current) {
+      return;
+    }
+
+    currentSessionRef.current = sessionId;
+
     const loadHistory = async () => {
       try {
         const response = await fetch(`/api/chat/history/${sessionId}`);
@@ -68,18 +71,23 @@ export function useChat(): UseChatReturn {
               status: 'complete' as const,
             }));
             setMessages(loadedMessages);
+          } else {
+            setMessages([]);
           }
+        } else {
+          setMessages([]);
         }
       } catch (error) {
         console.error('Failed to load chat history:', error);
+        setMessages([]);
       }
     };
 
     loadHistory();
-  }, []);
+  }, [sessionId]);
 
   const sendMessage = useCallback(async (content: string, image?: string) => {
-    if (isLoading) return;
+    if (isLoading || !sessionId) return;
 
     const userMessage: Message = {
       id: `msg_${Date.now()}`,
@@ -118,7 +126,7 @@ export function useChat(): UseChatReturn {
         body: JSON.stringify({
           message: content,
           image_data: imageData,
-          session_id: sessionIdRef.current,
+          session_id: sessionId,
           difficulty_feedback: pendingFeedback,
         }),
       });
@@ -213,7 +221,7 @@ export function useChat(): UseChatReturn {
       setLoadingState('idle');
       setCurrentAction(null);
     }
-  }, [isLoading, pendingFeedback]);
+  }, [isLoading, pendingFeedback, sessionId]);
 
   const sendDifficultyFeedback = useCallback((direction: 'too_hard' | 'too_easy') => {
     setPendingFeedback(direction);
@@ -221,14 +229,6 @@ export function useChat(): UseChatReturn {
 
   const clearPendingFeedback = useCallback(() => {
     setPendingFeedback(null);
-  }, []);
-
-  const clearHistory = useCallback(() => {
-    setMessages([]);
-    // Generate new session ID
-    const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    localStorage.setItem('nihongo_session_id', newSessionId);
-    sessionIdRef.current = newSessionId;
   }, []);
 
   return {
@@ -241,6 +241,5 @@ export function useChat(): UseChatReturn {
     sendMessage,
     sendDifficultyFeedback,
     clearPendingFeedback,
-    clearHistory,
   };
 }

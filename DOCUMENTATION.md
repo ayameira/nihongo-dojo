@@ -1,6 +1,6 @@
 # Nihongo Dojo - Technical Documentation
 
-**Version:** 0.2.0
+**Version:** 0.2.1
 **Status:** Active Development
 
 ---
@@ -44,9 +44,11 @@ nihongo-dojo/
 │   ├── components/
 │   │   ├── Chat.tsx              # Chat interface
 │   │   ├── VocabSidebar.tsx      # Vocabulary sidebar with Anki settings
+│   │   ├── SessionList.tsx       # Chat session list component
 │   │   └── CostDashboard.tsx     # Usage/cost tracking modal
 │   ├── hooks/
-│   │   └── useChat.ts            # Chat state management hook
+│   │   ├── useChat.ts            # Chat state management hook
+│   │   └── useSessions.ts        # Session management hook
 │   └── utils/
 │       └── streamReader.ts       # SSE stream parser
 │
@@ -59,6 +61,7 @@ nihongo-dojo/
 │   │   │   ├── vocab.py          # Vocabulary CRUD endpoints
 │   │   │   ├── notes.py          # CLASS_NOTES.md management
 │   │   │   ├── telemetry.py      # Token usage tracking
+│   │   │   ├── sessions.py       # Chat session management
 │   │   │   └── config.py         # Anki path configuration
 │   │   ├── core/
 │   │   │   ├── gemini_client.py  # Gemini API wrapper
@@ -124,6 +127,16 @@ FastAPI Backend
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/chat/stream` | Streaming chat with SSE |
+| GET | `/api/chat/history/{session_id}` | Get chat history for a session |
+
+### Sessions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sessions` | List all chat sessions |
+| POST | `/api/sessions` | Create a new session |
+| GET | `/api/sessions/{id}` | Get session details |
+| PUT | `/api/sessions/{id}` | Rename a session |
+| DELETE | `/api/sessions/{id}` | Delete session and messages |
 
 ### Vocabulary
 | Method | Endpoint | Description |
@@ -173,6 +186,31 @@ CREATE TABLE vocab_entries (
     last_seen_at TIMESTAMP,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
+);
+```
+
+### ChatSession
+```sql
+CREATE TABLE chat_sessions (
+    id TEXT PRIMARY KEY,           -- e.g., session_1706384400000_abc123
+    name TEXT,                     -- User-editable display name
+    preview TEXT,                  -- Auto-generated from first message
+    message_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+```
+
+### ChatMessage
+```sql
+CREATE TABLE chat_history (
+    id INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL,      -- Links to chat_sessions
+    role TEXT NOT NULL,            -- user, assistant
+    content TEXT NOT NULL,
+    image_data TEXT,               -- Base64 encoded image
+    token_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP
 );
 ```
 
@@ -320,17 +358,36 @@ Main chat interface with:
 
 ### VocabSidebar.tsx
 Vocabulary browser with:
+- **Chat Sessions section** at the top
 - Learning/Mature/New sections
 - Search functionality
 - Vocabulary detail modal
 - Anki settings modal (path config + manual sync)
 
+### SessionList.tsx
+Chat session management:
+- "New Chat" button to create new sessions
+- List of past conversations
+- Click to switch between sessions
+- Inline rename (click pencil icon)
+- Delete with confirmation modal
+- Auto-generated names from first message
+
 ### useChat Hook
 Manages chat state:
+- Accepts `sessionId` parameter
+- Loads history when session changes
 - Message history
 - SSE stream handling
 - Loading states
 - Difficulty feedback
+
+### useSessions Hook
+Manages session state:
+- List of all sessions
+- Current session ID (persisted in localStorage)
+- Create/switch/rename/delete sessions
+- Auto-creates session on first use
 
 ---
 
@@ -345,7 +402,19 @@ Manages chat state:
 
 ---
 
-## Recent Changes (v0.2.0)
+## Recent Changes (v0.2.1)
+
+- **Multi-Chat Sessions**: ChatGPT-style session management
+  - New "Conversations" section in sidebar
+  - Create new chats with "New Chat" button
+  - Switch between conversations
+  - Rename sessions (auto-named from first message)
+  - Delete sessions with confirmation
+  - Session history persists across browser restarts
+- Chat history now persists in database and reloads on page refresh
+- Fixed message ordering issue when loading history
+
+## Changes (v0.2.0)
 
 - Migrated from Tauri desktop app to browser-based web app
 - Added FastAPI backend with async SQLAlchemy

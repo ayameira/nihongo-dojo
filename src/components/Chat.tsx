@@ -6,6 +6,7 @@ import { useChat, Message, AgentAction } from '../hooks/useChat';
 interface ChatProps {
   blackboardContent?: string;
   onRefreshNotes?: () => void;
+  sessionId: string | null;
 }
 
 interface LimitInfo {
@@ -39,7 +40,7 @@ const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => 
   );
 };
 
-export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes }) => {
+export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, sessionId }) => {
   const {
     messages,
     isLoading,
@@ -50,7 +51,7 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes })
     sendMessage,
     sendDifficultyFeedback,
     clearPendingFeedback,
-  } = useChat();
+  } = useChat(sessionId);
 
   const [inputValue, setInputValue] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -164,11 +165,45 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes })
         />
       )}
       <p className="user-text">{msg.content}</p>
-      <span className="message-time">
-        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </span>
     </div>
   );
+
+  // Determine if we should show a timestamp before a message
+  const shouldShowTimestamp = (msg: Message, index: number): boolean => {
+    if (index === 0) return true;
+
+    const prevMsg = messages[index - 1];
+    const timeDiff = msg.timestamp.getTime() - prevMsg.timestamp.getTime();
+    const fiveMinutes = 5 * 60 * 1000;
+
+    // Show timestamp if more than 5 minutes have passed
+    if (timeDiff > fiveMinutes) return true;
+
+    // Show timestamp if it's a different day
+    const prevDate = prevMsg.timestamp.toDateString();
+    const currDate = msg.timestamp.toDateString();
+    if (prevDate !== currDate) return true;
+
+    return false;
+  };
+
+  const formatTimestamp = (date: Date): string => {
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (isToday) {
+      return time;
+    } else if (isYesterday) {
+      return `Yesterday, ${time}`;
+    } else {
+      return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+    }
+  };
 
   const renderAssistantMessage = (msg: Message) => (
     <div key={msg.id} className="message-assistant group">
@@ -304,7 +339,18 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes })
               </div>
             )}
 
-            {messages.map(renderMessage)}
+            {messages.map((msg, index) => (
+              <React.Fragment key={msg.id}>
+                {shouldShowTimestamp(msg, index) && (
+                  <div className="timestamp-cluster">
+                    <span className="timestamp-label">
+                      {formatTimestamp(msg.timestamp)}
+                    </span>
+                  </div>
+                )}
+                {renderMessage(msg)}
+              </React.Fragment>
+            ))}
 
             {/* Agent Action Display */}
             {isLoading && currentAction && (

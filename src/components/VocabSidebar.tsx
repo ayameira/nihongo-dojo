@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { SessionList } from './SessionList';
+import type { Session } from '../hooks/useSessions';
 
 interface VocabEntry {
   id: number;
@@ -21,11 +23,23 @@ interface VocabStats {
 interface VocabSidebarProps {
   isCollapsed?: boolean;
   onToggle?: () => void;
+  sessions?: Session[];
+  currentSessionId?: string | null;
+  onSessionSelect?: (sessionId: string) => void;
+  onSessionRename?: (sessionId: string, name: string) => void;
+  onSessionDelete?: (sessionId: string) => void;
+  onNewChat?: () => void;
 }
 
 export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   isCollapsed = false,
   onToggle,
+  sessions = [],
+  currentSessionId = null,
+  onSessionSelect,
+  onSessionRename,
+  onSessionDelete,
+  onNewChat,
 }) => {
   const [stats, setStats] = useState<VocabStats>({ new: 0, learning: 0, mature: 0, total: 0 });
   const [learningVocab, setLearningVocab] = useState<VocabEntry[]>([]);
@@ -246,11 +260,25 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
         </div>
       </div>
 
+      {/* Sessions */}
+      {onSessionSelect && onSessionRename && onSessionDelete && onNewChat && (
+        <div className="border-b border-gray-200">
+          <SessionList
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSelect={onSessionSelect}
+            onRename={onSessionRename}
+            onDelete={onSessionDelete}
+            onNewChat={onNewChat}
+          />
+        </div>
+      )}
+
       {/* Search */}
       <div className="p-2 border-b border-gray-100">
         <input
           type="text"
-          placeholder="Search..."
+          placeholder="Search vocab..."
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
           className="w-full px-3 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Chat from './components/Chat';
 import VocabSidebar from './components/VocabSidebar';
 import CostDashboard, { CostIndicator } from './components/CostDashboard';
+import { useSessions } from './hooks/useSessions';
 
 function App() {
   const [notesContent, setNotesContent] = useState<string>("");
@@ -10,6 +11,17 @@ function App() {
     return saved ? JSON.parse(saved) : false;
   });
   const [showCostDashboard, setShowCostDashboard] = useState(false);
+
+  // Session management
+  const {
+    sessions,
+    currentSessionId,
+    isLoading: sessionsLoading,
+    createSession,
+    switchSession,
+    renameSession,
+    deleteSession,
+  } = useSessions();
 
   const fetchNotes = useCallback(async () => {
     try {
@@ -40,6 +52,12 @@ function App() {
       <VocabSidebar
         isCollapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        onSessionSelect={switchSession}
+        onSessionRename={renameSession}
+        onSessionDelete={deleteSession}
+        onNewChat={createSession}
       />
 
       {/* Main Content */}
@@ -49,10 +67,17 @@ function App() {
           <CostIndicator onClick={() => setShowCostDashboard(true)} />
         </div>
 
-        <Chat
-          blackboardContent={notesContent}
-          onRefreshNotes={fetchNotes}
-        />
+        {sessionsLoading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-gray-500">Loading...</div>
+          </div>
+        ) : (
+          <Chat
+            blackboardContent={notesContent}
+            onRefreshNotes={fetchNotes}
+            sessionId={currentSessionId}
+          />
+        )}
       </main>
 
       {/* Cost Dashboard Modal */}
