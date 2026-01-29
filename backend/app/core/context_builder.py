@@ -14,8 +14,12 @@ You are a Japanese language tutor for an intermediate learner studying through i
 - Push the student to the edge of their ability (i+1 hypothesis)
 - Only switch to English for explicit grammar explanations, then immediately provide Japanese examples
 - Use vocabulary the student is currently learning when possible
+- Be a warm, personable tutor who remembers and cares about the student as a person
 
-## Student's Current Study Notes
+## About This Student
+{student_record_content}
+
+## Current Study Focus (Recent Memory)
 {class_notes_content}
 
 ## Vocabulary Currently Being Learned
@@ -24,13 +28,11 @@ You are a Japanese language tutor for an intermediate learner studying through i
 ## Instructions for Difficulty
 - If user says something is "too hard", simplify slightly but don't overcompensate
 - If user says something is "too easy", increase complexity gradually
-- When teaching new words, use the save_vocab tool
-- When noticing patterns in student mistakes, update the notes
 
 ## Tool Usage
 - Use save_vocab when you teach or correct a word (always dictionary form)
-- Use update_notes when you notice patterns worth remembering
-{difficulty_instruction}
+- Use update_notes when you notice patterns in current learning worth remembering
+- Use update_student_record when you learn something important about the student (goals, interests, background, preferences, or anything that helps you be a better tutor for them)
 """
 
 
@@ -42,32 +44,28 @@ async def build_context(
     settings = get_settings()
     notes_service = NotesService()
 
-    # Load class notes
+    # Load student record (long-term memory about the student)
+    student_record = await notes_service.read_notes(settings.student_record_path)
+
+    # Load class notes (recent memory / current focus)
     class_notes = await notes_service.read_notes(settings.class_notes_path)
 
-    # Fetch learning vocabulary
-    vocab_list = await fetch_learning_vocab(limit=50)
+    # Fetch ALL learning vocabulary (no limit)
+    vocab_list = await fetch_learning_vocab()
 
     # Format vocab list
     vocab_formatted = format_vocab_list(vocab_list)
 
-    # Difficulty instruction
-    difficulty_instruction = ""
-    if difficulty_feedback == "too_hard":
-        difficulty_instruction = "\n**Note:** The student indicated the previous content was too hard. Simplify your next response slightly."
-    elif difficulty_feedback == "too_easy":
-        difficulty_instruction = "\n**Note:** The student indicated the previous content was too easy. Increase complexity in your next response."
-
     # Build system prompt
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
         today=date.today().isoformat(),
+        student_record_content=student_record or "(No student record yet)",
         class_notes_content=class_notes or "(No notes yet)",
         vocab_list_formatted=vocab_formatted or "(No vocabulary loaded)",
-        difficulty_instruction=difficulty_instruction,
     )
 
-    # Fetch chat history
-    chat_history = await get_chat_history(session_id, limit=15)
+    # Fetch chat history (last 30 messages)
+    chat_history = await get_chat_history(session_id, limit=30)
 
     return {
         "system_prompt": system_prompt,
@@ -75,8 +73,8 @@ async def build_context(
     }
 
 
-async def fetch_learning_vocab(limit: int = 50) -> List[Dict]:
-    """Fetch vocabulary words with 'Learning' status."""
+async def fetch_learning_vocab() -> List[Dict]:
+    """Fetch ALL vocabulary words with 'Learning' status."""
     from app.db.database import async_session_maker
     from app.db.models import VocabEntry
     from sqlalchemy import select
@@ -87,7 +85,6 @@ async def fetch_learning_vocab(limit: int = 50) -> List[Dict]:
                 select(VocabEntry)
                 .where(VocabEntry.status == "Learning")
                 .order_by(VocabEntry.updated_at.desc())
-                .limit(limit)
             )
             result = await session.execute(stmt)
             entries = result.scalars().all()

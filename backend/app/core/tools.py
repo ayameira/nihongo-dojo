@@ -57,27 +57,32 @@ UPDATE_NOTES_TOOL = {
     }
 }
 
-ADJUST_DIFFICULTY_TOOL = {
-    "name": "adjust_difficulty",
-    "description": "Log when user indicates content is too hard or too easy.",
+UPDATE_STUDENT_RECORD_TOOL = {
+    "name": "update_student_record",
+    "description": "Update the student's long-term record with important information about them. Use this to remember things that help you be a better tutor: their goals, interests, background, learning preferences, personal details they share, or anything else worth remembering about them as a person.",
     "parameters": {
         "type": "object",
         "properties": {
-            "direction": {
+            "section": {
                 "type": "string",
-                "enum": ["easier", "harder"],
-                "description": "Whether to make content easier or harder"
+                "enum": ["goals", "background", "interests", "preferences", "notes"],
+                "description": "Which section to update: goals (language learning goals), background (their background/context), interests (hobbies, topics they enjoy), preferences (learning style preferences), notes (other important info)"
             },
-            "reason": {
+            "action": {
                 "type": "string",
-                "description": "Brief note about what was too hard/easy"
+                "enum": ["append", "replace"],
+                "description": "Whether to append to or replace the section content"
+            },
+            "content": {
+                "type": "string",
+                "description": "Markdown content to add or replace"
             }
         },
-        "required": ["direction"]
+        "required": ["section", "action", "content"]
     }
 }
 
-ALL_TOOLS = [SAVE_VOCAB_TOOL, UPDATE_NOTES_TOOL, ADJUST_DIFFICULTY_TOOL]
+ALL_TOOLS = [SAVE_VOCAB_TOOL, UPDATE_NOTES_TOOL, UPDATE_STUDENT_RECORD_TOOL]
 
 
 async def execute_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
@@ -89,8 +94,8 @@ async def execute_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
             return await execute_save_vocab(args)
         elif tool_name == "update_notes":
             return await execute_update_notes(args)
-        elif tool_name == "adjust_difficulty":
-            return await execute_adjust_difficulty(args)
+        elif tool_name == "update_student_record":
+            return await execute_update_student_record(args)
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -163,12 +168,23 @@ async def execute_update_notes(args: Dict[str, Any]) -> str:
     return f"Updated {section} section"
 
 
-async def execute_adjust_difficulty(args: Dict[str, Any]) -> str:
-    """Log difficulty adjustment request."""
-    direction = args["direction"]
-    reason = args.get("reason", "")
+async def execute_update_student_record(args: Dict[str, Any]) -> str:
+    """Update a section of the student record."""
+    from app.services.notes_service import NotesService
+    from app.config import get_settings
 
-    # For now, just log it. Could be persisted to notes or a separate table
-    logger.info(f"Difficulty adjustment: {direction} - {reason}")
+    settings = get_settings()
+    notes_service = NotesService()
 
-    return f"Noted: adjusting difficulty {direction}"
+    section = args["section"]
+    action = args["action"]
+    content = args["content"]
+
+    await notes_service.update_student_record_section(
+        settings.student_record_path,
+        section,
+        content,
+        action
+    )
+
+    return f"Updated student record: {section}"

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     # Paths
     class_notes_path: str = "./CLASS_NOTES.md"
+    student_record_path: str = "./STUDENT_RECORD.md"
     anki_collection_path: str = ""
 
     # Cost tracking

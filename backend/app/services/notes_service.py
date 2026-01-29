@@ -18,26 +18,57 @@ DEFAULT_NOTES_TEMPLATE = """# Japanese Study Notes
 <!-- Words recently taught in conversation -->
 """
 
+DEFAULT_STUDENT_RECORD_TEMPLATE = """# Student Record
+
+## Goals
+<!-- The student's language learning goals and aspirations -->
+
+## Background
+<!-- Context about the student - why they're learning, their situation -->
+
+## Interests
+<!-- Hobbies, topics they enjoy discussing, favorite things -->
+
+## Preferences
+<!-- Learning style preferences, what works well for them -->
+
+## Notes
+<!-- Other important information about the student -->
+"""
+
 SECTION_MAP = {
     "current_focus": "## Current Focus",
     "recent_corrections": "## Recent Corrections",
     "recent_vocab": "## Recent Vocab",
 }
 
+STUDENT_RECORD_SECTION_MAP = {
+    "goals": "## Goals",
+    "background": "## Background",
+    "interests": "## Interests",
+    "preferences": "## Preferences",
+    "notes": "## Notes",
+}
+
 
 class NotesService:
-    async def read_notes(self, file_path: str) -> str:
+    async def read_notes(self, file_path: str, is_student_record: bool = False) -> str:
         """Read the entire notes file content."""
+        default_template = DEFAULT_STUDENT_RECORD_TEMPLATE if is_student_record else DEFAULT_NOTES_TEMPLATE
+        # Auto-detect student record by filename
+        if "STUDENT_RECORD" in file_path.upper():
+            default_template = DEFAULT_STUDENT_RECORD_TEMPLATE
+
         try:
             if not os.path.exists(file_path):
-                await self.write_notes(file_path, DEFAULT_NOTES_TEMPLATE)
-                return DEFAULT_NOTES_TEMPLATE
+                await self.write_notes(file_path, default_template)
+                return default_template
 
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 return await f.read()
         except Exception as e:
             logger.error(f"Error reading notes: {e}")
-            return DEFAULT_NOTES_TEMPLATE
+            return default_template
 
     async def write_notes(self, file_path: str, content: str) -> None:
         """Write content to the notes file."""
@@ -80,6 +111,45 @@ class NotesService:
 
         if not header:
             raise ValueError(f"Invalid section: {section}")
+
+        # Find the section boundaries
+        pattern = rf"({re.escape(header)}\n)(.*?)(\n## |\Z)"
+        match = re.search(pattern, content, re.DOTALL)
+
+        if match:
+            if action == "append":
+                existing = match.group(2).strip()
+                if existing and not existing.startswith("<!--"):
+                    updated = f"{existing}\n{new_content}"
+                else:
+                    updated = new_content
+            else:  # replace
+                updated = new_content
+
+            # Rebuild the content
+            new_full = content[:match.start()] + match.group(1) + updated + "\n" + match.group(3)
+            if match.group(3) == "\n## ":
+                new_full = content[:match.start()] + match.group(1) + updated + match.group(3)
+
+            await self.write_notes(file_path, new_full.rstrip() + "\n")
+        else:
+            # Section not found, append it
+            content = content.rstrip() + f"\n\n{header}\n{new_content}\n"
+            await self.write_notes(file_path, content)
+
+    async def update_student_record_section(
+        self,
+        file_path: str,
+        section: str,
+        new_content: str,
+        action: str = "replace"
+    ) -> None:
+        """Update a specific section of the student record."""
+        content = await self.read_notes(file_path, is_student_record=True)
+        header = STUDENT_RECORD_SECTION_MAP.get(section)
+
+        if not header:
+            raise ValueError(f"Invalid student record section: {section}")
 
         # Find the section boundaries
         pattern = rf"({re.escape(header)}\n)(.*?)(\n## |\Z)"
