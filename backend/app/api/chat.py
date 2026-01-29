@@ -50,20 +50,22 @@ async def generate_stream(request: ChatRequest, settings):
         if request.image_data:
             parts.append({"mime_type": "image/jpeg", "data": request.image_data})
 
-        # Stream response
+        # Stream response with tool loop
         full_response = ""
         tool_calls = []
         usage_data = None
 
-        async for chunk in client.stream_chat(context, parts):
+        async for chunk in client.stream_chat(context, parts, tool_executor=execute_tool_call):
             if chunk["type"] == "text":
                 full_response += chunk["content"]
                 yield f"data: {json.dumps(chunk)}\n\n"
             elif chunk["type"] == "tool_call":
+                # Tool call initiated - frontend can show indicator
                 tool_calls.append(chunk)
-                # Execute tool call
-                result = await execute_tool_call(chunk["name"], chunk["args"])
-                yield f"data: {json.dumps({'type': 'tool_result', 'name': chunk['name'], 'result': result})}\n\n"
+                yield f"data: {json.dumps(chunk)}\n\n"
+            elif chunk["type"] == "tool_result":
+                # Tool executed, result sent back to model
+                yield f"data: {json.dumps(chunk)}\n\n"
             elif chunk["type"] == "usage":
                 usage_data = chunk
 

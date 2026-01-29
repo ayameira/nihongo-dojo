@@ -60,8 +60,15 @@ class GeminiClient:
         self,
         context: Dict,
         message_parts: List[Any],
+        tool_executor: Optional[callable] = None,
     ) -> AsyncGenerator[Dict, None]:
-        """Stream a chat response from Gemini."""
+        """Stream a chat response from Gemini with tool loop support.
+
+        Args:
+            context: Contains system_prompt and chat_history
+            message_parts: User message parts (text, images)
+            tool_executor: Async function to execute tools: async (name, args) -> result
+        """
         try:
             # Start chat with history
             chat = self.model.start_chat(
@@ -69,7 +76,6 @@ class GeminiClient:
             )
 
             # Build content with system instruction in first user message
-            # Note: Gemini 1.5+ supports system_instruction parameter
             system_prompt = context.get("system_prompt", "")
 
             # Prepare parts - include system context
@@ -90,62 +96,96 @@ class GeminiClient:
                         "data": base64.b64decode(part["data"]) if isinstance(part["data"], str) else part["data"],
                     })
 
-            # Generate response with streaming
-            response = await asyncio.to_thread(
-                lambda: chat.send_message(
-                    parts,
-                    stream=True,
+            total_input_tokens = 0
+            total_output_tokens = 0
+            max_tool_iterations = 10  # Safety limit
+            iteration = 0
+
+            while iteration < max_tool_iterations:
+                iteration += 1
+
+                # Generate response (non-streaming for tool loop, streaming for final)
+                # We use non-streaming when we might need to handle tools
+                response = await asyncio.to_thread(
+                    lambda p=parts: chat.send_message(p)
                 )
-            )
 
-            full_text = ""
-            for chunk in response:
-                # Check for function calls
-                if chunk.candidates and chunk.candidates[0].content.parts:
-                    for part in chunk.candidates[0].content.parts:
+                # Track usage
+                try:
+                    if hasattr(response, 'usage_metadata'):
+                        um = response.usage_metadata
+                        total_input_tokens += getattr(um, 'prompt_token_count', 0)
+                        total_output_tokens += getattr(um, 'candidates_token_count', 0)
+                except Exception as e:
+                    logger.warning(f"Could not get usage metadata: {e}")
+
+                # Check if response has function calls
+                function_calls = []
+                text_parts = []
+
+                if response.candidates and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
                         if hasattr(part, 'function_call') and part.function_call:
-                            fc = part.function_call
-                            yield {
-                                "type": "tool_call",
-                                "name": fc.name,
-                                "args": dict(fc.args),
-                            }
+                            function_calls.append(part.function_call)
                         elif hasattr(part, 'text') and part.text:
-                            full_text += part.text
-                            yield {
-                                "type": "text",
-                                "content": part.text,
-                            }
+                            text_parts.append(part.text)
 
-            # Get usage metadata
-            usage = None
-            try:
-                # Access the final response for usage metadata
-                if hasattr(response, '_result') and response._result:
-                    result = response._result
-                    if hasattr(result, 'usage_metadata'):
-                        um = result.usage_metadata
-                        input_tokens = getattr(um, 'prompt_token_count', 0)
-                        output_tokens = getattr(um, 'candidates_token_count', 0)
+                # If there are function calls, execute them and continue the loop
+                if function_calls and tool_executor:
+                    function_responses = []
 
-                        # Calculate cost
-                        cost = (
-                            (input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
-                            (output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+                    for fc in function_calls:
+                        # Yield tool call event to frontend
+                        yield {
+                            "type": "tool_call",
+                            "name": fc.name,
+                            "args": dict(fc.args),
+                        }
+
+                        # Execute the tool
+                        result = await tool_executor(fc.name, dict(fc.args))
+
+                        # Yield tool result to frontend
+                        yield {
+                            "type": "tool_result",
+                            "name": fc.name,
+                            "result": result,
+                        }
+
+                        # Prepare function response for Gemini
+                        function_responses.append(
+                            genai.protos.Part(
+                                function_response=genai.protos.FunctionResponse(
+                                    name=fc.name,
+                                    response={"result": result}
+                                )
+                            )
                         )
 
-                        usage = {
-                            "input_tokens": input_tokens,
-                            "output_tokens": output_tokens,
-                            "cost_usd": round(cost, 6),
-                        }
-            except Exception as e:
-                logger.warning(f"Could not get usage metadata: {e}")
+                    # Send function responses back to continue the conversation
+                    parts = function_responses
+                    # Continue the loop to get the next response
+                    continue
 
-            if usage:
+                # No function calls - yield the text response and exit loop
+                for text in text_parts:
+                    yield {
+                        "type": "text",
+                        "content": text,
+                    }
+                break
+
+            # Calculate and yield usage
+            if total_input_tokens > 0 or total_output_tokens > 0:
+                cost = (
+                    (total_input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
+                    (total_output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+                )
                 yield {
                     "type": "usage",
-                    **usage,
+                    "input_tokens": total_input_tokens,
+                    "output_tokens": total_output_tokens,
+                    "cost_usd": round(cost, 6),
                 }
 
         except Exception as e:
