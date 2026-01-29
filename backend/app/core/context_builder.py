@@ -70,6 +70,12 @@ async def build_context(
     return {
         "system_prompt": system_prompt,
         "chat_history": chat_history,
+        # Raw data for logging
+        "_raw": {
+            "student_record": student_record or "",
+            "class_notes": class_notes or "",
+            "vocab_list": vocab_list,
+        },
     }
 
 

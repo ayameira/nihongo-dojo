@@ -25,9 +25,17 @@ async def generate_stream(request: ChatRequest, settings):
     from app.core.tools import execute_tool_call
     from app.db.database import async_session_maker
     from app.db.models import ChatMessage, TokenLog, ChatSession
+    from app.services.request_logger import RequestLogger
     from sqlalchemy import select
 
+    request_logger = RequestLogger(settings.ai_logs_path)
+
     if not settings.gemini_api_key:
+        await request_logger.log_error(
+            session_id=request.session_id,
+            user_message=request.message,
+            error="Gemini API key not configured",
+        )
         yield f"data: {json.dumps({'type': 'error', 'content': 'Gemini API key not configured'})}\n\n"
         return
 
@@ -113,10 +121,46 @@ async def generate_stream(request: ChatRequest, settings):
 
             await session.commit()
 
+        # Log the complete interaction to disk
+        raw_context = context.get("_raw", {})
+        await request_logger.log_interaction(
+            session_id=request.session_id,
+            user_message=request.message,
+            image_data=request.image_data,
+            difficulty_feedback=request.difficulty_feedback,
+            system_prompt=context.get("system_prompt", ""),
+            chat_history=context.get("chat_history", []),
+            class_notes_content=raw_context.get("class_notes", ""),
+            student_record_content=raw_context.get("student_record", ""),
+            vocab_list=raw_context.get("vocab_list", []),
+            full_response=full_response,
+            tool_calls=tool_calls,
+            usage_data=usage_data,
+            model=settings.gemini_model,
+        )
+
         # Send done event
         yield f"data: {json.dumps({'type': 'done', 'usage': usage_data})}\n\n"
 
     except Exception as e:
+        # Log the error
+        raw_context = context.get("_raw", {}) if 'context' in dir() else {}
+        await request_logger.log_interaction(
+            session_id=request.session_id,
+            user_message=request.message,
+            image_data=request.image_data,
+            difficulty_feedback=request.difficulty_feedback,
+            system_prompt=context.get("system_prompt", "") if 'context' in dir() else "",
+            chat_history=context.get("chat_history", []) if 'context' in dir() else [],
+            class_notes_content=raw_context.get("class_notes", ""),
+            student_record_content=raw_context.get("student_record", ""),
+            vocab_list=raw_context.get("vocab_list", []),
+            full_response=full_response if 'full_response' in dir() else "",
+            tool_calls=tool_calls if 'tool_calls' in dir() else [],
+            usage_data=usage_data if 'usage_data' in dir() else None,
+            model=settings.gemini_model,
+            error=str(e),
+        )
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
 

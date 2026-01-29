@@ -342,11 +342,13 @@ You are a Japanese language tutor for an intermediate learner studying through i
 | `backend/app/api/chat.py` | HTTP endpoint, orchestration |
 | `backend/app/db/models.py` | Database schemas |
 | `backend/app/services/notes_service.py` | File-based notes management |
+| `backend/app/services/request_logger.py` | AI request/response logging to disk |
 | `backend/app/config.py` | Configuration settings |
 | `src/hooks/useChat.ts` | Frontend chat state management |
 | `src/utils/streamReader.ts` | SSE stream parsing |
 | `STUDENT_RECORD.md` | Long-term student information |
 | `CLASS_NOTES.md` | Current learning focus |
+| `logs/ai_interactions/` | AI interaction logs (auto-created) |
 
 ## Configuration
 
@@ -360,9 +362,110 @@ gemini_model: str = "gemini-2.0-flash"
 # File Paths
 class_notes_path: str = "./CLASS_NOTES.md"
 student_record_path: str = "./STUDENT_RECORD.md"
+ai_logs_path: str = "./logs/ai_interactions"
 
 # Cost tracking
 cost_limit_weekly: float = 10.0
 gemini_input_cost_per_1m: float = 0.075
 gemini_output_cost_per_1m: float = 0.30
+```
+
+## Request/Response Logging
+
+Every AI interaction is logged to disk for debugging and analysis. The `RequestLogger` service (`backend/app/services/request_logger.py`) captures complete request/response data.
+
+### Log Structure
+
+```
+logs/ai_interactions/
+└── YYYY-MM-DD/
+    └── {session_id}/
+        └── HH-MM-SS-ffffff.json
+```
+
+### Log Contents
+
+Each JSON log file contains:
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:45.123456",
+  "session_id": "abc-123",
+  "model": "gemini-2.0-flash",
+  "request": {
+    "user_message": "こんにちは！",
+    "has_image": true,
+    "image_data": "base64...",
+    "difficulty_feedback": null
+  },
+  "context": {
+    "system_prompt": "Current Date: 2024-01-15\n\nYou are a Japanese...",
+    "chat_history": [
+      {"role": "user", "parts": ["Previous message"]},
+      {"role": "model", "parts": ["Previous response"]}
+    ],
+    "chat_history_count": 30,
+    "files": {
+      "class_notes": "# Japanese Study Notes\n\n## Current Focus...",
+      "student_record": "# Student Record\n\n## Goals..."
+    },
+    "vocabulary": {
+      "items": [
+        {"kanji": "食べる", "kana": "たべる", "meaning": "to eat", "pos": "verb"}
+      ],
+      "count": 42
+    }
+  },
+  "response": {
+    "content": "こんにちは！元気ですか？",
+    "tool_calls": [
+      {"name": "save_vocab", "args": {"kana": "げんき", "meaning": "healthy", "pos": "na-adj"}}
+    ],
+    "tool_calls_count": 1
+  },
+  "usage": {
+    "input_tokens": 1234,
+    "output_tokens": 56,
+    "cost_usd": 0.00012
+  },
+  "error": null
+}
+```
+
+### What's Logged
+
+| Category | Data |
+|----------|------|
+| **Request** | User message, image data (full base64), difficulty feedback |
+| **Context** | Complete system prompt, all 30 history messages, CLASS_NOTES.md content, STUDENT_RECORD.md content, all Learning vocabulary |
+| **Response** | Full AI response text, all tool calls with arguments |
+| **Metadata** | Timestamp, session ID, model name, token usage, cost |
+| **Errors** | Any errors that occurred during processing |
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         REQUEST/RESPONSE LOGGING                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  Every AI interaction is logged to:                                             │
+│  ./logs/ai_interactions/YYYY-MM-DD/{session_id}/HH-MM-SS-ffffff.json           │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                         LOG CONTENTS                                     │   │
+│  ├─────────────────────────────────────────────────────────────────────────┤   │
+│  │                                                                         │   │
+│  │  REQUEST                    CONTEXT                    RESPONSE         │   │
+│  │  ├─ user_message           ├─ system_prompt           ├─ content       │   │
+│  │  ├─ image_data (base64)    ├─ chat_history (30)       ├─ tool_calls    │   │
+│  │  └─ difficulty_feedback    ├─ files                   └─ tool_count    │   │
+│  │                            │  ├─ class_notes                           │   │
+│  │  METADATA                  │  └─ student_record       USAGE            │   │
+│  │  ├─ timestamp              ├─ vocabulary              ├─ input_tokens  │   │
+│  │  ├─ session_id             │  ├─ items[]              ├─ output_tokens │   │
+│  │  ├─ model                  │  └─ count                └─ cost_usd      │   │
+│  │  └─ error                  └─ chat_history_count                       │   │
+│  │                                                                         │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```

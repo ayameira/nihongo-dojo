@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     class_notes_path: str = "./CLASS_NOTES.md"
     student_record_path: str = "./STUDENT_RECORD.md"
     anki_collection_path: str = ""
+    ai_logs_path: str = "./logs/ai_interactions"
 
     # Cost tracking
     cost_limit_weekly: float = 10.0
