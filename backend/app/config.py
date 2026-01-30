@@ -41,7 +41,6 @@ class Settings(BaseSettings):
     gemini_model: str = DEFAULT_MODEL
 
     # Paths
-    class_notes_path: str = "./CLASS_NOTES.md"
     student_record_path: str = "./STUDENT_RECORD.md"
     anki_collection_path: str = ""
     ai_logs_path: str = "./logs/ai_interactions"
@@ -50,9 +49,6 @@ class Settings(BaseSettings):
     cost_limit_weekly: float = 10.0
     gemini_input_cost_per_1m: float | None = None
     gemini_output_cost_per_1m: float | None = None
-
-    # Notes
-    notes_token_limit: int = 1000
 
     class Config:
         env_file = ".env"

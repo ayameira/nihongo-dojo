@@ -4,31 +4,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Tool definitions for Gemini
-UPDATE_NOTES_TOOL = {
-    "name": "update_notes",
-    "description": "Update a section of the student's study notes based on the conversation.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "section": {
-                "type": "string",
-                "enum": ["current_focus", "recent_corrections", "recent_vocab"],
-                "description": "Which section to update"
-            },
-            "action": {
-                "type": "string",
-                "enum": ["append", "replace"],
-                "description": "Whether to append to or replace the section content"
-            },
-            "content": {
-                "type": "string",
-                "description": "Markdown content to add or replace"
-            }
-        },
-        "required": ["section", "action", "content"]
-    }
-}
-
 UPDATE_STUDENT_RECORD_TOOL = {
     "name": "update_student_record",
     "description": "Update the student's long-term record with important information about them. Use this to remember things that help you be a better tutor: their goals, interests, background, learning preferences, personal details they share, or anything else worth remembering about them as a person.",
@@ -54,7 +29,7 @@ UPDATE_STUDENT_RECORD_TOOL = {
     }
 }
 
-ALL_TOOLS = [UPDATE_NOTES_TOOL, UPDATE_STUDENT_RECORD_TOOL]
+ALL_TOOLS = [UPDATE_STUDENT_RECORD_TOOL]
 
 
 async def execute_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
@@ -62,37 +37,13 @@ async def execute_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
     logger.info(f"Executing tool: {tool_name} with args: {args}")
 
     try:
-        if tool_name == "update_notes":
-            return await execute_update_notes(args)
-        elif tool_name == "update_student_record":
+        if tool_name == "update_student_record":
             return await execute_update_student_record(args)
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
         logger.error(f"Tool execution error: {e}")
         return f"Error executing {tool_name}: {str(e)}"
-
-
-async def execute_update_notes(args: Dict[str, Any]) -> str:
-    """Update a section of the class notes."""
-    from app.services.notes_service import NotesService
-    from app.config import get_settings
-
-    settings = get_settings()
-    notes_service = NotesService()
-
-    section = args["section"]
-    action = args["action"]
-    content = args["content"]
-
-    await notes_service.update_section(
-        settings.class_notes_path,
-        section,
-        content,
-        action
-    )
-
-    return f"Updated {section} section"
 
 
 async def execute_update_student_record(args: Dict[str, Any]) -> str:

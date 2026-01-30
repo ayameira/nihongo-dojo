@@ -32,12 +32,11 @@ def test_settings() -> Settings:
         database_url="sqlite+aiosqlite:///:memory:",
         gemini_api_key="test-api-key",
         gemini_model="gemini-2.0-flash",
-        class_notes_path="./test_notes.md",
+        student_record_path="./test_student_record.md",
         anki_collection_path="",
         cost_limit_weekly=10.0,
         gemini_input_cost_per_1m=0.075,
         gemini_output_cost_per_1m=0.30,
-        notes_token_limit=1000,
     )
 
 
@@ -183,19 +182,25 @@ async def sample_token_logs(async_session: AsyncSession, sample_session: ChatSes
 
 
 @pytest.fixture
-def temp_notes_file() -> Generator[str, None, None]:
-    """Create a temporary notes file for testing."""
+def temp_student_record_file() -> Generator[str, None, None]:
+    """Create a temporary student record file for testing."""
     with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-        f.write("""# Japanese Study Notes
+        f.write("""# Student Record
 
-## Current Focus
-Learning verb conjugations
+## Goals
+Become conversational in Japanese
 
-## Recent Corrections
-- Use は instead of が for topic
+## Background
+Software engineer learning for travel
 
-## Recent Vocab
-- 食べる (たべる): to eat
+## Interests
+Anime, manga, Japanese food
+
+## Preferences
+Prefers immersive learning
+
+## Notes
+Good at verb conjugations
 """)
         temp_path = f.name
 

@@ -10,8 +10,9 @@ This document provides a detailed reference of all AI interactions in Nihongo Do
 2. [Memory Injections](#2-memory-injections)
 3. [Tool Definitions](#3-tool-definitions)
 4. [Tool Loop Mechanism](#4-tool-loop-mechanism)
-5. [Request/Response Logging](#5-requestresponse-logging)
-6. [File Reference](#6-file-reference)
+5. [Background Memory Compaction](#5-background-memory-compaction)
+6. [Request/Response Logging](#6-requestresponse-logging)
+7. [File Reference](#7-file-reference)
 
 ---
 
@@ -36,8 +37,8 @@ You are a Japanese language tutor for an intermediate learner studying through i
 ## About This Student
 {student_record_content}
 
-## Current Study Focus (Recent Memory)
-{class_notes_content}
+## Conversation Summary (This Session)
+{session_summary}
 
 ## Vocabulary Currently Being Learned
 {vocab_list_formatted}
@@ -47,20 +48,7 @@ You are a Japanese language tutor for an intermediate learner studying through i
 - If user says something is "too easy", increase complexity gradually
 
 ## Tool Usage
-- Use update_notes when you notice patterns in current learning worth remembering
-- Use update_student_record when you learn something important about the student (goals, interests, background, preferences, or anything that helps you be a better tutor for them)
-
-## Important: Keep Notes Updated
-ALWAYS record new learnings in the class notes using update_notes. This includes:
-- New grammar points introduced or practiced
-- Expressions and phrases taught
-- Vocabulary themes explored (e.g., "studied medical terms", "practiced food vocabulary")
-- Patterns in mistakes or areas needing work
-- Any significant teaching moments
-
-Record the broader learning context and themes, not individual words.
-
-When the class notes get too long or topics become stale, clean them up. Before removing anything, ask yourself: "Is this worth remembering long-term?" If yes, move it to the student record (e.g., "student has solid grasp of て-form", "struggles with keigo"). If it's no longer relevant, you can remove it.
+Use update_student_record when you learn something important about the student (goals, interests, background, preferences, or anything that helps you be a better tutor for them)
 ```
 
 ### Injection Points
@@ -69,7 +57,7 @@ When the class notes get too long or topics become stale, clean them up. Before 
 |----------|--------|-------------|
 | `{today}` | `date.today().isoformat()` | Current date in ISO format (e.g., "2024-01-15") |
 | `{student_record_content}` | `STUDENT_RECORD.md` file | Long-term memory about the student |
-| `{class_notes_content}` | `CLASS_NOTES.md` file | Current learning focus and recent patterns |
+| `{session_summary}` | `chat_sessions.summary` column | Compacted summary of archived messages from this session |
 | `{vocab_list_formatted}` | SQLite database | All vocabulary with status="Learning" |
 
 ### System Prompt Injection Logic
@@ -121,32 +109,7 @@ if system_prompt and not context.get("chat_history"):
 <!-- Other important information about the student -->
 ```
 
-### 2.2 Class Notes (Short-term Memory)
-
-**Source File:** `CLASS_NOTES.md` (configurable via `class_notes_path`)
-
-**Loaded at:** `backend/app/core/context_builder.py:62`
-
-**Sections:**
-- `## Current Focus` - Grammar points or themes currently being studied
-- `## Recent Corrections` - Patterns of mistakes
-- `## Recent Vocab` - Vocabulary themes recently taught
-
-**Default Template:**
-```markdown
-# Japanese Study Notes
-
-## Current Focus
-<!-- What grammar points or vocabulary themes are we currently working on -->
-
-## Recent Corrections
-<!-- Patterns of mistakes the student makes -->
-
-## Recent Vocab
-<!-- Words recently taught in conversation -->
-```
-
-### 2.3 Vocabulary List
+### 2.2 Vocabulary List
 
 **Source:** SQLite database, `vocab_entries` table
 
@@ -169,22 +132,25 @@ stmt = (
 - すごい: amazing [i-adj]
 ```
 
-### 2.4 Chat History
+### 2.3 Chat History
 
 **Source:** SQLite database, `chat_history` table
 
-**Query:** `backend/app/core/context_builder.py:137-164`
+**Query:** `backend/app/core/context_builder.py`
 
 ```python
 stmt = (
     select(ChatMessage)
     .where(ChatMessage.session_id == session_id)
+    .where(ChatMessage.is_archived == False)  # Exclude compacted messages
     .order_by(ChatMessage.created_at.desc())
-    .limit(30)  # Last 30 messages
+    .limit(30)  # Last 30 non-archived messages
 )
 ```
 
-**Limit:** 30 messages per session
+**Limit:** 30 non-archived messages per session
+
+**Archived Messages:** When a session exceeds 30 messages, the oldest 10 are compacted into a summary and marked as `is_archived=True`. These archived messages are excluded from the chat history but their content is preserved in the session summary (see [Background Memory Compaction](#5-background-memory-compaction)).
 
 **Format:** Converted to Gemini format:
 ```python
@@ -196,34 +162,27 @@ stmt = (
 
 **Injection:** Passed to `model.start_chat(history=chat_history)` at `gemini_client.py:74-76`
 
+### 2.4 Session Summary (Compacted History)
+
+**Source:** SQLite database, `chat_sessions.summary` column
+
+**Query:** `backend/app/core/context_builder.py`
+
+```python
+stmt = select(ChatSession.summary).where(ChatSession.id == session_id)
+```
+
+**Purpose:** When messages are compacted, a summary of the archived conversation is stored here. This allows the tutor to maintain context of the entire session even after older messages are removed from active history.
+
+**Default:** `"(No previous conversation in this session)"` when no compaction has occurred yet.
+
 ---
 
 ## 3. Tool Definitions
 
 **File:** `backend/app/core/tools.py`
 
-### 3.1 update_notes
-
-**Definition:** Lines 7-30
-
-**Purpose:** Update short-term memory (CLASS_NOTES.md)
-
-**Description sent to model:**
-> "Update a section of the student's study notes based on the conversation."
-
-**Parameters:**
-
-| Name | Type | Required | Values | Description |
-|------|------|----------|--------|-------------|
-| `section` | string | Yes | `current_focus`, `recent_corrections`, `recent_vocab` | Which section to update |
-| `action` | string | Yes | `append`, `replace` | Whether to append to or replace content |
-| `content` | string | Yes | (any) | Markdown content to add or replace |
-
-**Execution:** `backend/app/core/tools.py:76-95`
-
-Calls `NotesService.update_section()` which modifies `CLASS_NOTES.md`
-
-### 3.2 update_student_record
+### 3.1 update_student_record
 
 **Definition:** Lines 32-55
 
@@ -246,10 +205,10 @@ Calls `NotesService.update_student_record_section()` which modifies `STUDENT_REC
 
 ### Tool Registration
 
-**File:** `backend/app/core/tools.py:57`
+**File:** `backend/app/core/tools.py`
 
 ```python
-ALL_TOOLS = [UPDATE_NOTES_TOOL, UPDATE_STUDENT_RECORD_TOOL]
+ALL_TOOLS = [UPDATE_STUDENT_RECORD_TOOL]
 ```
 
 **Conversion to Gemini format:** `backend/app/core/gemini_client.py:25-45`
@@ -341,7 +300,156 @@ The loop will exit after 10 iterations to prevent infinite loops.
 
 ---
 
-## 5. Request/Response Logging
+## 5. Background Memory Compaction
+
+**File:** `backend/app/services/memory_service.py`
+
+The memory compaction system automatically summarizes old messages to prevent context window overflow while preserving conversation continuity.
+
+### Overview
+
+When a chat session accumulates 30+ active (non-archived) messages, the system:
+1. Selects the oldest 10 non-archived messages
+2. Sends them to Gemini with a summarization prompt
+3. Generates a session summary (stored in `chat_sessions.summary`)
+4. Extracts any new student facts (appended to `STUDENT_RECORD.md`)
+5. Marks the 10 messages as `is_archived=True`
+
+### Trigger Mechanism
+
+**File:** `backend/app/api/chat.py`
+
+Compaction runs as a **FastAPI BackgroundTask** after each chat response:
+
+```python
+await session.commit()
+
+# Schedule memory compaction check as background task (non-blocking)
+background_tasks.add_task(run_compaction_if_needed, request.session_id)
+```
+
+This ensures compaction never blocks the user's chat experience.
+
+### Compaction Prompt
+
+**File:** `backend/app/services/memory_service.py`
+
+The compaction AI receives a specialized prompt (different from the tutor prompt):
+
+```
+You are the Memory Manager for Nihongo Dojo.
+
+I will provide you with:
+1. A 'Current Conversation Summary' (may be empty if first compaction)
+2. A 'Recent Chunk' of 10 messages
+
+## Task 1: Recursive Summarization
+Update the summary to include key events from the chunk. Be concise but specific.
+Example: "User practiced Te-form verbs (tabete, nonde). Discussed travel to Tokyo."
+
+## Task 2: Fact Extraction
+Did the user reveal NEW permanent info (biography, goals, interests, dislikes)?
+If yes, extract it. If no, return null.
+
+## Output (JSON only)
+{"new_summary": "...", "new_student_facts": "..." or null}
+```
+
+### Dual Output Channels
+
+| Channel | Destination | Purpose |
+|---------|-------------|---------|
+| **Session Summary** | `chat_sessions.summary` column | Preserves conversation context within the session |
+| **Student Facts** | `STUDENT_RECORD.md` (Notes section) | Extracts permanent info to long-term memory |
+
+### Database Schema
+
+**ChatMessage** (updated):
+```python
+is_archived = Column(Boolean, default=False, index=True)
+```
+
+**ChatSession** (updated):
+```python
+summary = Column(Text, nullable=True)
+```
+
+### Flow Diagram
+
+```
+User sends message #31
+         │
+         ▼
+┌─────────────────────────┐
+│ Chat response generated │
+│ and committed to DB     │
+└─────────────────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│ BackgroundTask starts   │
+│ run_compaction_if_needed│
+└─────────────────────────┘
+         │
+         ▼
+    Active msgs >= 30?
+       /          \
+      NO           YES
+       │            │
+       ▼            ▼
+   (exit)    ┌──────────────────┐
+             │ Get oldest 10    │
+             │ non-archived msgs│
+             └──────────────────┘
+                     │
+                     ▼
+             ┌──────────────────┐
+             │ Call Gemini with │
+             │ compaction prompt│
+             └──────────────────┘
+                     │
+                     ▼
+             ┌──────────────────┐
+             │ Save summary to  │
+             │ ChatSession      │
+             └──────────────────┘
+                     │
+                     ▼
+             ┌──────────────────┐
+             │ If facts found,  │
+             │ update STUDENT_  │
+             │ RECORD.md        │
+             └──────────────────┘
+                     │
+                     ▼
+             ┌──────────────────┐
+             │ Mark 10 msgs as  │
+             │ is_archived=True │
+             └──────────────────┘
+```
+
+### Error Handling
+
+| Failure Point | Behavior |
+|---------------|----------|
+| Gemini API error | Log error, do NOT archive messages (retry on next trigger) |
+| Database save error | Log error, rollback, do NOT archive |
+| Notes service error | Log error, but still save summary (partial success) |
+
+Messages are only marked as archived **after** the summary is successfully saved, ensuring no data loss.
+
+### Key Functions
+
+| Function | Purpose |
+|----------|---------|
+| `MemoryService.should_compact(session_id)` | Check if 30+ active messages |
+| `MemoryService.run_compaction(session_id)` | Execute full compaction flow |
+| `run_compaction_if_needed(session_id)` | Background task entry point |
+| `GeminiClient.generate_json(prompt)` | Non-streaming JSON response for compaction |
+
+---
+
+## 6. Request/Response Logging
 
 **File:** `backend/app/services/request_logger.py`
 
@@ -379,7 +487,6 @@ logs/ai_interactions/
     ],
     "chat_history_count": 30,
     "files": {
-      "class_notes": "# Japanese Study Notes\n\n## Current Focus...",
       "student_record": "# Student Record\n\n## Goals..."
     },
     "vocabulary": {
@@ -395,8 +502,8 @@ logs/ai_interactions/
     "tool_calls": [
       {
         "type": "tool_call",
-        "name": "update_notes",
-        "args": {"section": "current_focus", "action": "append", "content": "..."}
+        "name": "update_student_record",
+        "args": {"section": "notes", "action": "append", "content": "..."}
       }
     ],
     "tool_calls_count": 1
@@ -416,7 +523,7 @@ logs/ai_interactions/
 
 | Issue | Check in Log |
 |-------|--------------|
-| Agent not remembering context | `context.system_prompt` - is student record/class notes populated? |
+| Agent not remembering context | `context.system_prompt` - is student record populated? |
 | Agent not using vocabulary | `context.vocabulary.items` - are words present? |
 | Agent not responding after tool use | `response.tool_calls` vs `response.content` |
 | Wrong behavior | `context.system_prompt` - check instructions |
@@ -424,34 +531,33 @@ logs/ai_interactions/
 
 ---
 
-## 6. File Reference
+## 7. File Reference
 
 ### Core AI Files
 
 | File | Purpose | Key Functions/Variables |
 |------|---------|------------------------|
-| `backend/app/core/context_builder.py` | Builds system prompt and context | `SYSTEM_PROMPT_TEMPLATE`, `build_context()` |
-| `backend/app/core/gemini_client.py` | Gemini API client with tool loop | `GeminiClient`, `stream_chat()` |
+| `backend/app/core/context_builder.py` | Builds system prompt and context | `SYSTEM_PROMPT_TEMPLATE`, `build_context()`, `get_session_summary()` |
+| `backend/app/core/gemini_client.py` | Gemini API client with tool loop | `GeminiClient`, `stream_chat()`, `generate_json()` |
 | `backend/app/core/tools.py` | Tool definitions and execution | `ALL_TOOLS`, `execute_tool_call()` |
-| `backend/app/api/chat.py` | HTTP endpoint, orchestration | `generate_stream()` |
+| `backend/app/api/chat.py` | HTTP endpoint, orchestration | `generate_stream()`, BackgroundTasks integration |
 | `backend/app/services/notes_service.py` | File-based notes management | `NotesService` |
+| `backend/app/services/memory_service.py` | Background memory compaction | `MemoryService`, `run_compaction_if_needed()` |
 | `backend/app/services/request_logger.py` | Interaction logging | `RequestLogger` |
 
 ### Memory Files
 
 | File | Purpose | Updated By |
 |------|---------|------------|
-| `STUDENT_RECORD.md` | Long-term student info | `update_student_record` tool |
-| `CLASS_NOTES.md` | Current learning focus | `update_notes` tool |
+| `STUDENT_RECORD.md` | Long-term student info | `update_student_record` tool, memory compaction |
 
 ### Configuration
 
 | Setting | File | Default |
 |---------|------|---------|
-| `class_notes_path` | `backend/app/config.py:15` | `./CLASS_NOTES.md` |
-| `student_record_path` | `backend/app/config.py:16` | `./STUDENT_RECORD.md` |
-| `ai_logs_path` | `backend/app/config.py:18` | `./logs/ai_interactions` |
-| `gemini_model` | `backend/app/config.py:12` | `gemini-2.0-flash` |
+| `student_record_path` | `backend/app/config.py` | `./STUDENT_RECORD.md` |
+| `ai_logs_path` | `backend/app/config.py` | `./logs/ai_interactions` |
+| `gemini_model` | `backend/app/config.py` | `gemini-2.0-flash` |
 
 ---
 
@@ -459,7 +565,20 @@ logs/ai_interactions/
 
 1. **Check the logs:** `logs/ai_interactions/{date}/{session}/`
 2. **Verify system prompt:** Is it being injected? (only on first message)
-3. **Check memory files:** Are `CLASS_NOTES.md` and `STUDENT_RECORD.md` being updated?
+3. **Check memory file:** Is `STUDENT_RECORD.md` being updated?
 4. **Tool execution:** Are tools being called? Check `tool_calls` in logs
 5. **Tool loop:** Is the agent responding after tool use? Check for `text` content after `tool_result`
 6. **Token usage:** Are costs reasonable? Check `usage` in logs
+7. **Memory compaction:** Check database for archived messages and session summaries:
+   ```sql
+   -- Check archived message count
+   SELECT is_archived, COUNT(*) FROM chat_history GROUP BY is_archived;
+
+   -- Check session summary
+   SELECT id, summary FROM chat_sessions WHERE id = 'your-session-id';
+   ```
+8. **Compaction not triggering?** Verify active message count >= 30:
+   ```sql
+   SELECT COUNT(*) FROM chat_history
+   WHERE session_id = 'your-session-id' AND is_archived = FALSE;
+   ```

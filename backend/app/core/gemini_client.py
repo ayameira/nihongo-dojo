@@ -194,3 +194,52 @@ class GeminiClient:
                 "type": "error",
                 "content": str(e),
             }
+
+    async def generate_json(self, prompt: str) -> Dict:
+        """Generate a JSON response from Gemini without streaming.
+
+        Used for structured output tasks like memory compaction where
+        streaming is not needed and JSON format is required.
+
+        Args:
+            prompt: The prompt to send to Gemini
+
+        Returns:
+            Dict with 'result' (parsed JSON) and 'usage' (token/cost info)
+        """
+        import json as json_module
+
+        try:
+            # Create model without tools, with JSON response format
+            json_model = genai.GenerativeModel(
+                model_name=self.settings.gemini_model,
+                generation_config={"response_mime_type": "application/json"},
+            )
+
+            response = await asyncio.to_thread(
+                json_model.generate_content, prompt
+            )
+
+            result = json_module.loads(response.text)
+
+            # Track usage for cost monitoring
+            usage = None
+            if hasattr(response, 'usage_metadata'):
+                um = response.usage_metadata
+                input_tokens = getattr(um, 'prompt_token_count', 0)
+                output_tokens = getattr(um, 'candidates_token_count', 0)
+                cost = (
+                    (input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
+                    (output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+                )
+                usage = {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cost_usd": round(cost, 6),
+                }
+
+            return {"result": result, "usage": usage}
+
+        except Exception as e:
+            logger.error(f"Gemini JSON generation error: {e}")
+            raise

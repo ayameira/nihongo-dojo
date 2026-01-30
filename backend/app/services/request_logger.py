@@ -33,7 +33,6 @@ class RequestLogger:
         # Context data
         system_prompt: str,
         chat_history: List[Dict],
-        class_notes_content: str,
         student_record_content: str,
         vocab_list: List[Dict],
         # Response data
@@ -63,7 +62,6 @@ class RequestLogger:
                 "chat_history": chat_history,
                 "chat_history_count": len(chat_history),
                 "files": {
-                    "class_notes": class_notes_content,
                     "student_record": student_record_content,
                 },
                 "vocabulary": {

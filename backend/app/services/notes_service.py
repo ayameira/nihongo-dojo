@@ -137,6 +137,22 @@ class NotesService:
             content = content.rstrip() + f"\n\n{header}\n{new_content}\n"
             await self.write_notes(file_path, content)
 
+    async def read_student_record_section(self, file_path: str, section: str) -> str:
+        """Extract content from a specific section of the student record."""
+        content = await self.read_notes(file_path, is_student_record=True)
+        header = STUDENT_RECORD_SECTION_MAP.get(section)
+
+        if not header:
+            return ""
+
+        # Find the section
+        pattern = rf"{re.escape(header)}\n(.*?)(?=\n## |\Z)"
+        match = re.search(pattern, content, re.DOTALL)
+
+        if match:
+            return match.group(1).strip()
+        return ""
+
     async def update_student_record_section(
         self,
         file_path: str,

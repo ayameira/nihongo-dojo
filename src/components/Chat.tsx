@@ -256,7 +256,7 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
               onClick={() => setActiveTab('blackboard')}
               className={`tab-btn ${activeTab === 'blackboard' ? 'active' : ''}`}
             >
-              Notes
+              Profile
             </button>
           </div>
         </div>
@@ -314,8 +314,8 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
           <div className="notes-view">
             <div className="notes-header">
               <h2 className="notes-title">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-                Study Notes
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Student Profile
               </h2>
               {onRefreshNotes && (
                 <button onClick={onRefreshNotes} className="refresh-btn" title="Refresh">
@@ -358,8 +358,8 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
               </div>
             ) : (
               <div className="notes-empty">
-                <p>No notes yet</p>
-                <p className="notes-hint">Notes will appear as you learn</p>
+                <p>No profile yet</p>
+                <p className="notes-hint">Your tutor will learn about you as you chat</p>
               </div>
             )}
           </div>

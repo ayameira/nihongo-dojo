@@ -35,6 +35,7 @@ class ChatMessage(Base):
     content = Column(Text, nullable=False)
     image_data = Column(Text, nullable=True)  # Base64 encoded
     token_count = Column(Integer, default=0)
+    is_archived = Column(Boolean, default=False, index=True)  # For memory compaction
     created_at = Column(DateTime, default=func.now())
 
 
@@ -58,5 +59,6 @@ class ChatSession(Base):
     name = Column(String(200), nullable=True)
     preview = Column(String(100), nullable=True)
     message_count = Column(Integer, default=0)
+    summary = Column(Text, nullable=True)  # Compacted conversation summary
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

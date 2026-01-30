@@ -1,17 +1,17 @@
 """
-API tests for notes routes.
+API tests for notes routes (now serves student record).
 """
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
 
 class TestGetNotes:
     """Tests for GET /api/notes endpoint."""
 
     @pytest.mark.asyncio
-    async def test_returns_notes_content(self, test_client, temp_notes_file, test_settings):
-        """Test retrieving notes content."""
-        test_settings.class_notes_path = temp_notes_file
+    async def test_returns_student_record_content(self, test_client, temp_student_record_file, test_settings):
+        """Test retrieving student record content."""
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.api.notes.get_settings', return_value=test_settings):
             response = await test_client.get("/api/notes")
@@ -19,23 +19,23 @@ class TestGetNotes:
         assert response.status_code == 200
         data = response.json()
         assert "content" in data
-        assert "Japanese Study Notes" in data["content"]
+        assert "Student Record" in data["content"]
 
 
 class TestGetSection:
     """Tests for GET /api/notes/{section} endpoint."""
 
     @pytest.mark.asyncio
-    async def test_returns_section_content(self, test_client, temp_notes_file, test_settings):
+    async def test_returns_section_content(self, test_client, temp_student_record_file, test_settings):
         """Test retrieving a specific section."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.get("/api/notes/current_focus")
+            response = await test_client.get("/api/notes/goals")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["section"] == "current_focus"
+        assert data["section"] == "goals"
         assert "content" in data
 
     @pytest.mark.asyncio
@@ -47,11 +47,11 @@ class TestGetSection:
         assert "Invalid section" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_accepts_all_valid_sections(self, test_client, temp_notes_file, test_settings):
+    async def test_accepts_all_valid_sections(self, test_client, temp_student_record_file, test_settings):
         """Test that all valid sections are accepted."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
-        valid_sections = ["current_focus", "recent_corrections", "recent_vocab"]
+        valid_sections = ["goals", "background", "interests", "preferences", "notes"]
 
         with patch('app.api.notes.get_settings', return_value=test_settings):
             for section in valid_sections:
@@ -63,10 +63,10 @@ class TestUpdateNotes:
     """Tests for PUT /api/notes endpoint."""
 
     @pytest.mark.asyncio
-    async def test_updates_full_notes(self, test_client, temp_notes_file, test_settings):
-        """Test updating the entire notes file."""
-        test_settings.class_notes_path = temp_notes_file
-        new_content = "# New Notes Content\n\nUpdated content here"
+    async def test_updates_full_student_record(self, test_client, temp_student_record_file, test_settings):
+        """Test updating the entire student record file."""
+        test_settings.student_record_path = temp_student_record_file
+        new_content = "# Student Record\n\n## Goals\nNew goals here"
 
         with patch('app.api.notes.get_settings', return_value=test_settings):
             response = await test_client.put(
@@ -82,16 +82,16 @@ class TestUpdateSection:
     """Tests for PUT /api/notes/{section} endpoint."""
 
     @pytest.mark.asyncio
-    async def test_replaces_section(self, test_client, temp_notes_file, test_settings):
+    async def test_replaces_section(self, test_client, temp_student_record_file, test_settings):
         """Test replacing a section's content."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.api.notes.get_settings', return_value=test_settings):
             response = await test_client.put(
-                "/api/notes/current_focus",
+                "/api/notes/goals",
                 json={
                     "action": "replace",
-                    "content": "New focus content"
+                    "content": "New goals content"
                 }
             )
 
@@ -99,16 +99,16 @@ class TestUpdateSection:
         assert "updated" in response.json()["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_appends_to_section(self, test_client, temp_notes_file, test_settings):
+    async def test_appends_to_section(self, test_client, temp_student_record_file, test_settings):
         """Test appending to a section's content."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.api.notes.get_settings', return_value=test_settings):
             response = await test_client.put(
-                "/api/notes/recent_vocab",
+                "/api/notes/notes",
                 json={
                     "action": "append",
-                    "content": "- new word"
+                    "content": "Additional note"
                 }
             )
 
@@ -125,13 +125,13 @@ class TestUpdateSection:
         assert response.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_returns_400_for_invalid_action(self, test_client, temp_notes_file, test_settings):
+    async def test_returns_400_for_invalid_action(self, test_client, temp_student_record_file, test_settings):
         """Test that 400 is returned for invalid action."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.api.notes.get_settings', return_value=test_settings):
             response = await test_client.put(
-                "/api/notes/current_focus",
+                "/api/notes/goals",
                 json={"action": "invalid_action", "content": "test"}
             )
 
@@ -139,28 +139,13 @@ class TestUpdateSection:
         assert "Action must be" in response.json()["detail"]
 
 
-class TestArchiveNotes:
-    """Tests for POST /api/notes/archive endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_returns_archived_status(self, test_client, temp_notes_file, test_settings):
-        """Test archive endpoint returns status."""
-        test_settings.class_notes_path = temp_notes_file
-
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.post("/api/notes/archive")
-
-        assert response.status_code == 200
-        assert "archived" in response.json()
-
-
 class TestGetTokenCount:
     """Tests for GET /api/notes/token-count endpoint."""
 
     @pytest.mark.asyncio
-    async def test_returns_token_count(self, test_client, temp_notes_file, test_settings):
+    async def test_returns_token_count(self, test_client, temp_student_record_file, test_settings):
         """Test retrieving token count."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.api.notes.get_settings', return_value=test_settings):
             response = await test_client.get("/api/notes/token-count")

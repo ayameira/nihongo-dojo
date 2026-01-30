@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -18,7 +18,7 @@ class ChatRequest(BaseModel):
     difficulty_feedback: Optional[str] = None  # 'too_hard' | 'too_easy'
 
 
-async def generate_stream(request: ChatRequest, settings):
+async def generate_stream(request: ChatRequest, settings, background_tasks: BackgroundTasks):
     """Generate SSE stream for chat response."""
     from app.core.gemini_client import GeminiClient
     from app.core.context_builder import build_context
@@ -26,6 +26,7 @@ async def generate_stream(request: ChatRequest, settings):
     from app.db.database import async_session_maker
     from app.db.models import ChatMessage, TokenLog, ChatSession
     from app.services.request_logger import RequestLogger
+    from app.services.memory_service import run_compaction_if_needed
     from sqlalchemy import select
 
     request_logger = RequestLogger(settings.ai_logs_path)
@@ -123,6 +124,9 @@ async def generate_stream(request: ChatRequest, settings):
 
             await session.commit()
 
+            # Schedule memory compaction check as background task (non-blocking)
+            background_tasks.add_task(run_compaction_if_needed, request.session_id)
+
         # Log the complete interaction to disk
         raw_context = context.get("_raw", {})
         await request_logger.log_interaction(
@@ -132,7 +136,6 @@ async def generate_stream(request: ChatRequest, settings):
             difficulty_feedback=request.difficulty_feedback,
             system_prompt=context.get("system_prompt", ""),
             chat_history=context.get("chat_history", []),
-            class_notes_content=raw_context.get("class_notes", ""),
             student_record_content=raw_context.get("student_record", ""),
             vocab_list=raw_context.get("vocab_list", []),
             full_response=full_response,
@@ -154,7 +157,6 @@ async def generate_stream(request: ChatRequest, settings):
             difficulty_feedback=request.difficulty_feedback,
             system_prompt=context.get("system_prompt", "") if 'context' in dir() else "",
             chat_history=context.get("chat_history", []) if 'context' in dir() else [],
-            class_notes_content=raw_context.get("class_notes", ""),
             student_record_content=raw_context.get("student_record", ""),
             vocab_list=raw_context.get("vocab_list", []),
             full_response=full_response if 'full_response' in dir() else "",
@@ -167,10 +169,10 @@ async def generate_stream(request: ChatRequest, settings):
 
 
 @router.post("/stream")
-async def stream_chat(request: ChatRequest):
+async def stream_chat(request: ChatRequest, background_tasks: BackgroundTasks):
     settings = get_settings()
     return StreamingResponse(
-        generate_stream(request, settings),
+        generate_stream(request, settings, background_tasks),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

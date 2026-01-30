@@ -83,7 +83,7 @@ class TestFetchLearningVocab:
         mock_session_maker.return_value.__aexit__ = AsyncMock(return_value=None)
 
         with patch('app.db.database.async_session_maker', mock_session_maker):
-            result = await fetch_learning_vocab(limit=50)
+            result = await fetch_learning_vocab()
 
         assert len(result) == 1
         assert result[0]["kanji"] == "学ぶ"
@@ -155,84 +155,58 @@ class TestBuildContext:
     """Tests for build_context function."""
 
     @pytest.mark.asyncio
-    async def test_builds_context_with_all_components(self, test_settings, temp_notes_file):
+    async def test_builds_context_with_all_components(self, test_settings, temp_student_record_file):
         """Test that context includes all components."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.core.context_builder.get_settings', return_value=test_settings):
             with patch('app.core.context_builder.fetch_learning_vocab', new_callable=AsyncMock) as mock_vocab:
                 with patch('app.core.context_builder.get_chat_history', new_callable=AsyncMock) as mock_history:
-                    mock_vocab.return_value = [
-                        {"kanji": "食べる", "kana": "たべる", "meaning": "to eat", "pos": "verb"}
-                    ]
-                    mock_history.return_value = []
+                    with patch('app.core.context_builder.get_session_summary', new_callable=AsyncMock) as mock_summary:
+                        mock_vocab.return_value = [
+                            {"kanji": "食べる", "kana": "たべる", "meaning": "to eat", "pos": "verb"}
+                        ]
+                        mock_history.return_value = []
+                        mock_summary.return_value = None
 
-                    result = await build_context("test_session_123")
+                        result = await build_context("test_session_123")
 
         assert "system_prompt" in result
         assert "chat_history" in result
         assert "食べる" in result["system_prompt"]
 
     @pytest.mark.asyncio
-    async def test_includes_current_date(self, test_settings, temp_notes_file):
+    async def test_includes_current_date(self, test_settings, temp_student_record_file):
         """Test that system prompt includes current date."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.core.context_builder.get_settings', return_value=test_settings):
             with patch('app.core.context_builder.fetch_learning_vocab', new_callable=AsyncMock) as mock_vocab:
                 with patch('app.core.context_builder.get_chat_history', new_callable=AsyncMock) as mock_history:
-                    mock_vocab.return_value = []
-                    mock_history.return_value = []
+                    with patch('app.core.context_builder.get_session_summary', new_callable=AsyncMock) as mock_summary:
+                        mock_vocab.return_value = []
+                        mock_history.return_value = []
+                        mock_summary.return_value = None
 
-                    result = await build_context("test_session")
+                        result = await build_context("test_session")
 
         today = date.today().isoformat()
         assert today in result["system_prompt"]
 
     @pytest.mark.asyncio
-    async def test_includes_too_hard_instruction(self, test_settings, temp_notes_file):
-        """Test that 'too_hard' feedback adds simplification instruction."""
-        test_settings.class_notes_path = temp_notes_file
-
-        with patch('app.core.context_builder.get_settings', return_value=test_settings):
-            with patch('app.core.context_builder.fetch_learning_vocab', new_callable=AsyncMock) as mock_vocab:
-                with patch('app.core.context_builder.get_chat_history', new_callable=AsyncMock) as mock_history:
-                    mock_vocab.return_value = []
-                    mock_history.return_value = []
-
-                    result = await build_context("test_session", difficulty_feedback="too_hard")
-
-        assert "too hard" in result["system_prompt"].lower()
-        assert "simplify" in result["system_prompt"].lower()
-
-    @pytest.mark.asyncio
-    async def test_includes_too_easy_instruction(self, test_settings, temp_notes_file):
-        """Test that 'too_easy' feedback adds complexity instruction."""
-        test_settings.class_notes_path = temp_notes_file
-
-        with patch('app.core.context_builder.get_settings', return_value=test_settings):
-            with patch('app.core.context_builder.fetch_learning_vocab', new_callable=AsyncMock) as mock_vocab:
-                with patch('app.core.context_builder.get_chat_history', new_callable=AsyncMock) as mock_history:
-                    mock_vocab.return_value = []
-                    mock_history.return_value = []
-
-                    result = await build_context("test_session", difficulty_feedback="too_easy")
-
-        assert "too easy" in result["system_prompt"].lower()
-        assert "complexity" in result["system_prompt"].lower()
-
-    @pytest.mark.asyncio
-    async def test_handles_no_vocab(self, test_settings, temp_notes_file):
+    async def test_handles_no_vocab(self, test_settings, temp_student_record_file):
         """Test context building when no vocab is available."""
-        test_settings.class_notes_path = temp_notes_file
+        test_settings.student_record_path = temp_student_record_file
 
         with patch('app.core.context_builder.get_settings', return_value=test_settings):
             with patch('app.core.context_builder.fetch_learning_vocab', new_callable=AsyncMock) as mock_vocab:
                 with patch('app.core.context_builder.get_chat_history', new_callable=AsyncMock) as mock_history:
-                    mock_vocab.return_value = []
-                    mock_history.return_value = []
+                    with patch('app.core.context_builder.get_session_summary', new_callable=AsyncMock) as mock_summary:
+                        mock_vocab.return_value = []
+                        mock_history.return_value = []
+                        mock_summary.return_value = None
 
-                    result = await build_context("test_session")
+                        result = await build_context("test_session")
 
         assert "No vocabulary loaded" in result["system_prompt"]
 
@@ -243,16 +217,15 @@ class TestSystemPromptTemplate:
     def test_template_has_required_placeholders(self):
         """Test that template has all required format placeholders."""
         assert "{today}" in SYSTEM_PROMPT_TEMPLATE
-        assert "{class_notes_content}" in SYSTEM_PROMPT_TEMPLATE
+        assert "{student_record_content}" in SYSTEM_PROMPT_TEMPLATE
         assert "{vocab_list_formatted}" in SYSTEM_PROMPT_TEMPLATE
-        assert "{difficulty_instruction}" in SYSTEM_PROMPT_TEMPLATE
+        assert "{session_summary}" in SYSTEM_PROMPT_TEMPLATE
 
     def test_template_describes_tutor_role(self):
         """Test that template establishes tutor role."""
         assert "Japanese" in SYSTEM_PROMPT_TEMPLATE
         assert "tutor" in SYSTEM_PROMPT_TEMPLATE.lower()
 
-    def test_template_mentions_tools(self):
-        """Test that template mentions available tools."""
-        assert "save_vocab" in SYSTEM_PROMPT_TEMPLATE
-        assert "update_notes" in SYSTEM_PROMPT_TEMPLATE
+    def test_template_mentions_student_record_tool(self):
+        """Test that template mentions the student record tool."""
+        assert "update_student_record" in SYSTEM_PROMPT_TEMPLATE
