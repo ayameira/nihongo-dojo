@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     # Gemini API
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-3-flash-preview"
 
     # Paths
     class_notes_path: str = "./CLASS_NOTES.md"
@@ -19,8 +19,8 @@ class Settings(BaseSettings):
 
     # Cost tracking
     cost_limit_weekly: float = 10.0
-    gemini_input_cost_per_1m: float = 0.075
-    gemini_output_cost_per_1m: float = 0.30
+    gemini_input_cost_per_1m: float = 0.50
+    gemini_output_cost_per_1m: float = 3.00
 
     # Notes
     notes_token_limit: int = 1000
