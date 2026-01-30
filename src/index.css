@@ -1340,112 +1340,343 @@ body {
 }
 
 .tanuki-samurai {
-  width: 80px;
-  height: 96px;
+  width: 100px;
+  height: 120px;
   position: relative;
   transition: transform 0.1s ease;
 }
 
 .tanuki-samurai:hover {
-  transform: scale(1.05);
+  transform: scale(1.08);
 }
 
 .tanuki-samurai.slash {
-  animation: slash 0.3s ease;
+  animation: slash 0.4s ease;
 }
 
 @keyframes slash {
-  0% { transform: rotate(0); }
-  25% { transform: rotate(-10deg) translateX(-5px); }
-  50% { transform: rotate(15deg) translateX(5px); }
-  100% { transform: rotate(0); }
+  0% { transform: rotate(0) scale(1); }
+  20% { transform: rotate(-15deg) translateX(-8px) scale(1.05); }
+  50% { transform: rotate(20deg) translateX(8px) scale(1.1); }
+  100% { transform: rotate(0) scale(1); }
 }
 
-/* Tanuki Body */
+/* Tanuki Body - battle stance */
 .tanuki-body {
   position: relative;
   width: 100%;
   height: 100%;
+  transform: rotate(-2deg);
 }
 
-/* Leaf on head */
+/* Leaf on head - smaller, battle-worn */
 .tanuki-leaf {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 10px;
+  background: linear-gradient(135deg, #3D8B3D 0%, #2D6A2D 100%);
+  border-radius: 2px 65% 2px 65%;
+  transform-origin: bottom center;
+  animation: battle-leaf 4s ease-in-out infinite;
+  box-shadow:
+    inset 0 -1px 2px rgba(0,0,0,0.3),
+    0 1px 2px rgba(0,0,0,0.2);
+  z-index: 10;
+}
+
+/* Leaf vein */
+.tanuki-leaf::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 10px;
+  height: 1px;
+  background: rgba(0,0,0,0.25);
+  transform: rotate(25deg);
+}
+
+/* Leaf stem */
+.tanuki-leaf::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 3px;
+  background: #4D7A3D;
+  border-radius: 1px;
+}
+
+@keyframes battle-leaf {
+  0%, 100% { transform: translateX(-50%) rotate(-3deg); }
+  50% { transform: translateX(-50%) rotate(3deg); }
+}
+
+/* Helmet (Kabuto) - Authentic bowl shape */
+.tanuki-helmet {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 62px;
+  height: 28px;
+  background:
+    radial-gradient(ellipse 80% 100% at 50% 100%, #1a1a1a 0%, #2d2d2d 60%, #1a1a1a 100%);
+  border-radius: 50% 50% 10% 10%;
+  box-shadow:
+    0 3px 0 #0a0a0a,
+    inset 0 4px 8px rgba(255,255,255,0.08),
+    inset 0 -2px 4px rgba(0,0,0,0.5);
+}
+
+/* Gold mabisashi (front visor band) */
+.tanuki-helmet::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 58px;
+  height: 10px;
+  background: linear-gradient(180deg, #FFD700 0%, #B8860B 40%, #8B6914 100%);
+  border-radius: 0 0 6px 6px;
+  box-shadow:
+    inset 0 2px 2px rgba(255,255,255,0.4),
+    0 2px 3px rgba(0,0,0,0.4);
+}
+
+/* Helmet rivets/decoration */
+.tanuki-helmet::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 4px;
+  background:
+    radial-gradient(circle 2px at 5px 50%, #FFD700 70%, transparent 70%),
+    radial-gradient(circle 2px at 15px 50%, #FFD700 70%, transparent 70%),
+    radial-gradient(circle 2px at 25px 50%, #FFD700 70%, transparent 70%),
+    radial-gradient(circle 2px at 35px 50%, #FFD700 70%, transparent 70%),
+    radial-gradient(circle 2px at 45px 50%, #FFD700 70%, transparent 70%);
+}
+
+/* Kuwagata (stag beetle horns) - tall blade-like */
+.tanuki-horn {
+  position: absolute;
+  top: -34px;
+  width: 6px;
+  height: 52px;
+  z-index: 5;
+}
+
+.tanuki-horn.left {
+  left: 10px;
+  transform: rotate(-18deg);
+  background: linear-gradient(90deg, #8B6914 0%, #B8860B 20%, #FFD700 50%, #B8860B 80%, #8B6914 100%);
+  clip-path: polygon(0% 0%, 100% 0%, 100% 85%, 50% 100%, 0% 85%);
+  box-shadow:
+    2px 0 6px rgba(255, 215, 0, 0.5),
+    inset 2px 0 4px rgba(255,255,255,0.3);
+}
+
+.tanuki-horn.right {
+  right: 10px;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, #8B6914 0%, #B8860B 20%, #FFD700 50%, #B8860B 80%, #8B6914 100%);
+  clip-path: polygon(0% 0%, 100% 0%, 100% 85%, 50% 100%, 0% 85%);
+  box-shadow:
+    -2px 0 6px rgba(255, 215, 0, 0.5),
+    inset -2px 0 4px rgba(255,255,255,0.3);
+}
+
+/* Horn top flare */
+.tanuki-horn::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 8px;
+  background: linear-gradient(180deg, #FFD700 0%, #B8860B 100%);
+  clip-path: polygon(20% 100%, 0% 0%, 50% 30%, 100% 0%, 80% 100%);
+}
+
+/* Center ornament (oni/dragon maedate) */
+.tanuki-horn-center {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 18px;
+  background: linear-gradient(180deg, #FFD700 0%, #DAA520 40%, #B8860B 100%);
+  z-index: 6;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 70%, 75% 100%, 25% 100%, 0% 70%, 0% 25%);
+  box-shadow:
+    0 0 8px rgba(255, 215, 0, 0.8);
+}
+
+/* Oni face detail on center */
+.tanuki-horn-center::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 6px;
+  background: #8B0000;
+  border-radius: 30% 30% 50% 50%;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.tanuki-horn-center::after {
+  content: '';
   position: absolute;
   top: 4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 16px;
-  height: 10px;
-  background: var(--jade);
-  border-radius: 0 80% 0 80%;
-  transform-origin: bottom center;
-  animation: leaf-sway 3s ease-in-out infinite;
+  width: 10px;
+  height: 2px;
+  background:
+    radial-gradient(circle 2px at 2px 50%, #1a1a1a 60%, transparent 60%),
+    radial-gradient(circle 2px at 8px 50%, #1a1a1a 60%, transparent 60%);
 }
 
-@keyframes leaf-sway {
-  0%, 100% { transform: translateX(-50%) rotate(-5deg); }
-  50% { transform: translateX(-50%) rotate(5deg); }
-}
-
-/* Helmet */
-.tanuki-helmet {
+/* Face - Pyramidal tanuki face (wider at jaw, narrow at top) */
+.tanuki-face {
   position: absolute;
-  top: 12px;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 62px;
+  height: 44px;
+  background: linear-gradient(180deg, #9B8365 0%, #8B7355 30%, #6B5335 100%);
+  overflow: visible;
+  box-shadow:
+    inset 0 -3px 6px rgba(0,0,0,0.15),
+    0 2px 4px rgba(0,0,0,0.2);
+  /* Stronger pyramid - very narrow top, very wide bottom */
+  clip-path: polygon(25% 0%, 75% 0%, 100% 70%, 100% 100%, 0% 100%, 0% 70%);
+}
+
+/* Muzzle - wider to match face */
+.tanuki-muzzle {
+  position: absolute;
+  bottom: -2px;
   left: 50%;
   transform: translateX(-50%);
   width: 44px;
-  height: 20px;
-  background: var(--ink);
-  border-radius: 22px 22px 0 0;
+  height: 18px;
+  background: linear-gradient(180deg, #D4B896 0%, #C4A886 100%);
+  border-radius: 30% 30% 45% 45%;
+  z-index: 0;
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,0.1);
 }
 
-.tanuki-helmet::before {
-  content: '';
+/* Whiskers - hidden for warrior look */
+.tanuki-whiskers {
+  display: none;
+}
+
+/* Battle scars/markings instead of cheek blush */
+.tanuki-cheeks {
+  display: none;
+}
+
+/* Eye markings - tanuki dark patches */
+.tanuki-eye-patch {
   position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 8px;
-  height: 12px;
-  background: var(--vermillion);
-  border-radius: 2px;
+  width: 16px;
+  height: 14px;
+  background: linear-gradient(180deg, #4D3E27 0%, #5D4E37 100%);
+  border-radius: 40%;
+  top: 6px;
+  z-index: 1;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
 }
 
-/* Face */
-.tanuki-face {
-  position: absolute;
-  top: 28px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 48px;
-  height: 36px;
-  background: #8B7355;
-  border-radius: 24px 24px 20px 20px;
-}
+.tanuki-eye-patch.left { left: 8px; }
+.tanuki-eye-patch.right { right: 8px; }
 
-/* Eyes */
+/* Eyes - Fierce and determined */
 .tanuki-eye {
   position: absolute;
-  width: 8px;
+  width: 12px;
   height: 10px;
-  background: var(--ink);
-  border-radius: 50%;
+  background: #1a1a1a;
+  border-radius: 40% 40% 50% 50%;
   top: 10px;
-  animation: blink 4s ease-in-out infinite;
+  animation: fierce-blink 5s ease-in-out infinite;
+  z-index: 2;
+  box-shadow:
+    inset 0 0 3px rgba(255,255,255,0.1),
+    0 1px 2px rgba(0,0,0,0.3);
 }
 
 .tanuki-eye.left { left: 10px; }
 .tanuki-eye.right { right: 10px; }
 
+/* Main highlight - intense glint */
+.tanuki-eye::before {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: white;
+  border-radius: 50%;
+  top: 1px;
+  left: 2px;
+  box-shadow: 0 0 2px white;
+}
+
+/* Secondary highlight */
 .tanuki-eye::after {
   content: '';
   position: absolute;
-  width: 3px;
-  height: 3px;
-  background: white;
+  width: 2px;
+  height: 2px;
+  background: rgba(255,255,255,0.7);
   border-radius: 50%;
+  top: 4px;
+  left: 6px;
+}
+
+@keyframes fierce-blink {
+  0%, 47%, 53%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.2); }
+}
+
+/* Fierce eyebrows - thick and angry */
+.tanuki-eyebrow {
+  position: absolute;
+  width: 16px;
+  height: 5px;
+  background: linear-gradient(180deg, #2D1E0F 0%, #4D3E2F 100%);
   top: 2px;
-  left: 2px;
+  z-index: 3;
+  border-radius: 3px 3px 1px 1px;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.3);
+}
+
+.tanuki-eyebrow.left {
+  left: 6px;
+  transform: rotate(20deg);
+  border-radius: 3px 1px 1px 3px;
+}
+
+.tanuki-eyebrow.right {
+  right: 6px;
+  transform: rotate(-20deg);
+  border-radius: 1px 3px 3px 1px;
 }
 
 @keyframes blink {
@@ -1453,16 +1684,20 @@ body {
   50% { transform: scaleY(0.1); }
 }
 
-/* Nose */
+/* Nose - larger, more defined */
 .tanuki-nose {
   position: absolute;
-  bottom: 8px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  width: 10px;
-  height: 6px;
-  background: var(--ink);
+  width: 12px;
+  height: 8px;
+  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
   border-radius: 50%;
+  z-index: 2;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.2),
+    0 1px 2px rgba(0,0,0,0.3);
 }
 
 /* Sweat drop for danger state */
@@ -1482,43 +1717,68 @@ body {
   50% { opacity: 0.5; transform: translateY(3px); }
 }
 
-/* Ears */
+/* Ears - Softened pointed tanuki ears */
 .tanuki-ear {
   position: absolute;
-  top: 20px;
-  width: 14px;
-  height: 14px;
-  background: #8B7355;
-  border-radius: 50%;
+  top: 12px;
+  width: 18px;
+  height: 22px;
+  background: linear-gradient(180deg, #9B8365 0%, #7B6345 100%);
   z-index: -1;
+  box-shadow:
+    inset 0 -3px 4px rgba(0,0,0,0.25),
+    1px 2px 4px rgba(0,0,0,0.2);
+  border-radius: 50% 50% 40% 40%;
+  clip-path: ellipse(50% 50% at 50% 50%);
 }
 
-.tanuki-ear.left { left: 8px; }
-.tanuki-ear.right { right: 8px; }
+.tanuki-ear.left {
+  left: 4px;
+  transform: rotate(-10deg);
+  border-radius: 60% 40% 40% 50%;
+}
 
+.tanuki-ear.right {
+  right: 4px;
+  transform: rotate(10deg);
+  border-radius: 40% 60% 50% 40%;
+}
+
+/* Inner ear - softened */
 .tanuki-ear::after {
   content: '';
   position: absolute;
-  width: 8px;
-  height: 8px;
-  background: #D4A574;
-  border-radius: 50%;
-  top: 3px;
-  left: 3px;
+  width: 10px;
+  height: 12px;
+  background: linear-gradient(180deg, #D4A090 0%, #C49080 100%);
+  top: 6px;
+  left: 4px;
+  border-radius: 50% 50% 40% 40%;
 }
 
-/* Armor */
+/* Armor (Do - chest protector) - Imposing layered armor */
 .tanuki-armor {
   position: absolute;
-  top: 62px;
+  top: 70px;
   left: 50%;
   transform: translateX(-50%);
-  width: 40px;
-  height: 28px;
-  background: var(--ink);
-  border-radius: 4px;
+  width: 52px;
+  height: 40px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      #2d2d2d 0px,
+      #2d2d2d 6px,
+      #1a1a1a 6px,
+      #1a1a1a 8px
+    );
+  border-radius: 4px 4px 8px 8px;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.15),
+    0 4px 8px rgba(0,0,0,0.4);
 }
 
+/* Chest emblem - mon crest */
 .tanuki-armor::before {
   content: '';
   position: absolute;
@@ -1526,67 +1786,271 @@ body {
   left: 50%;
   transform: translateX(-50%);
   width: 20px;
-  height: 8px;
-  background: var(--vermillion);
-  border-radius: 2px;
+  height: 20px;
+  background: radial-gradient(circle, #C62828 40%, #8B0000 100%);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,0.3),
+    0 2px 4px rgba(0,0,0,0.4),
+    0 0 0 2px #FFD700;
 }
 
+/* Belt/obi with gold trim */
 .tanuki-armor::after {
   content: '';
   position: absolute;
-  bottom: 4px;
+  bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
-  width: 24px;
-  height: 6px;
-  background: #333;
+  width: 48px;
+  height: 8px;
+  background: linear-gradient(180deg, #8B0000 0%, #5C0000 100%);
   border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.2),
+    0 0 0 1px #B8860B;
 }
 
-/* Katana */
-.tanuki-katana {
-  position: absolute;
-  top: 50px;
-  left: 0;
-  width: 6px;
-  height: 36px;
-  background: linear-gradient(to bottom, #C0C0C0 0%, #E8E8E8 50%, #C0C0C0 100%);
-  border-radius: 3px 3px 1px 1px;
-  transform-origin: top center;
-  transition: transform 0.2s ease;
-}
-
-.tanuki-katana::before {
+/* Shadow beneath tanuki - larger, more dramatic */
+.tanuki-samurai::after {
   content: '';
   position: absolute;
   bottom: -8px;
   left: 50%;
   transform: translateX(-50%);
+  width: 70px;
+  height: 10px;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.1) 50%, transparent 70%);
+  border-radius: 50%;
+}
+
+/* Shoulder guards (O-Sode) - Large imposing plates */
+.tanuki-sode {
+  position: absolute;
+  top: 62px;
+  width: 18px;
+  height: 32px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      #3d3d3d 0px,
+      #3d3d3d 5px,
+      #2a2a2a 5px,
+      #2a2a2a 7px
+    );
+  border-radius: 3px 3px 6px 6px;
+  z-index: 2;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.2),
+    2px 3px 6px rgba(0,0,0,0.4);
+}
+
+.tanuki-sode.left {
+  left: 0px;
+  transform: rotate(12deg);
+}
+
+.tanuki-sode.right {
+  right: 0px;
+  transform: rotate(-12deg);
+}
+
+/* Top trim */
+.tanuki-sode::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(180deg, #C62828 0%, #8B0000 100%);
+  border-radius: 3px 3px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+/* Gold rivets */
+.tanuki-sode::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background: radial-gradient(circle, #FFD700 30%, #B8860B 100%);
+  border-radius: 50%;
+  box-shadow:
+    0 8px 0 #B8860B,
+    0 16px 0 #B8860B;
+}
+
+/* Paws/Arms - visible clawed paws */
+.tanuki-paw {
+  position: absolute;
+  top: 88px;
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(180deg, #9B8365 0%, #7B6345 100%);
+  border-radius: 50%;
+  z-index: 3;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.tanuki-paw.left {
+  left: 2px;
+}
+
+.tanuki-paw.right {
+  right: 2px;
+}
+
+/* Paw pads */
+.tanuki-paw::before {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 6px;
+  background: #4D3E27;
+  border-radius: 50%;
+}
+
+/* Claws */
+.tanuki-paw::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
   width: 10px;
-  height: 8px;
-  background: var(--ink);
+  height: 3px;
+  background:
+    radial-gradient(ellipse 3px 3px at 20% 50%, #1a1a1a 50%, transparent 50%),
+    radial-gradient(ellipse 3px 3px at 50% 50%, #1a1a1a 50%, transparent 50%),
+    radial-gradient(ellipse 3px 3px at 80% 50%, #1a1a1a 50%, transparent 50%);
+}
+
+/* Katana - Large imposing blade */
+.tanuki-katana {
+  position: absolute;
+  top: 30px;
+  left: -10px;
+  width: 8px;
+  height: 55px;
+  background: linear-gradient(90deg,
+    #909090 0%,
+    #C0C0C0 20%,
+    #FFFFFF 45%,
+    #F8F8F8 50%,
+    #E0E0E0 55%,
+    #C0C0C0 80%,
+    #909090 100%
+  );
+  border-radius: 2px 4px 1px 1px;
+  transform-origin: bottom center;
+  transition: transform 0.3s ease;
+  box-shadow:
+    inset -2px 0 0 rgba(255,255,255,0.9),
+    2px 2px 8px rgba(0,0,0,0.3);
+  /* Hamon (temper line) */
+  border-right: 1px solid rgba(200,200,200,0.5);
+}
+
+/* Tsuba (guard) - ornate */
+.tanuki-katana::before {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 5px;
+  background: linear-gradient(180deg, #3a3a3a 0%, #1a1a1a 100%);
   border-radius: 2px;
+  box-shadow:
+    0 0 0 2px #B8860B,
+    inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+/* Tsuka (handle) with ito wrap */
+.tanuki-katana::after {
+  content: '';
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 17px;
+  background: repeating-linear-gradient(
+    0deg,
+    #1a1a1a 0px,
+    #1a1a1a 3px,
+    #8B0000 3px,
+    #8B0000 5px
+  );
+  border-radius: 2px 2px 3px 3px;
+  box-shadow: 0 2px 0 #B8860B;
 }
 
 .tanuki-samurai:hover .tanuki-katana {
-  transform: rotate(-20deg) translateX(-5px);
+  transform: rotate(-35deg) translateX(-12px);
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.3));
 }
 
-/* Tail */
+/* Tail - Large imposing tanuki tail */
 .tanuki-tail {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 20px;
-  height: 16px;
-  background: #8B7355;
-  border-radius: 50%;
-  animation: tail-wag 2s ease-in-out infinite;
+  bottom: 0px;
+  right: -14px;
+  width: 34px;
+  height: 50px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      #8B7355 0px,
+      #8B7355 8px,
+      #5D4E37 8px,
+      #5D4E37 12px
+    );
+  border-radius: 17px 17px 14px 14px;
+  animation: power-tail 2.5s ease-in-out infinite;
+  transform-origin: bottom center;
+  overflow: hidden;
+  box-shadow:
+    inset 3px 0 6px rgba(255,255,255,0.1),
+    -2px 2px 6px rgba(0,0,0,0.2);
 }
 
-@keyframes tail-wag {
-  0%, 100% { transform: rotate(-5deg); }
-  50% { transform: rotate(5deg); }
+/* Tail highlight */
+.tanuki-tail::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 10px;
+  height: 42px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 10px;
+}
+
+/* Tail tip - darker */
+.tanuki-tail::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 10px;
+  background: #3D2E1F;
+  border-radius: 0 0 14px 14px;
+}
+
+@keyframes power-tail {
+  0%, 100% { transform: rotate(-5deg) scale(1); }
+  50% { transform: rotate(5deg) scale(1.02); }
 }
 
 /* State variations */
@@ -1604,12 +2068,12 @@ body {
   75% { transform: translateX(-50%) translateX(1px); }
 }
 
-/* Breathing animation */
+/* Power stance animation */
 .tanuki-body {
-  animation: breathe 3s ease-in-out infinite;
+  animation: power-stance 4s ease-in-out infinite;
 }
 
-@keyframes breathe {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(1.02); }
+@keyframes power-stance {
+  0%, 100% { transform: rotate(-2deg) scale(1); }
+  50% { transform: rotate(-2deg) scale(1.02); }
 }

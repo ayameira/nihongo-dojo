@@ -1,10 +1,5 @@
 # Japanese Study Notes
 
 ## Current Focus
-<!-- What grammar points or vocabulary themes are we currently working on -->
-
-## Recent Corrections
-<!-- Patterns of mistakes the student makes -->
-
-## Recent Vocab
-<!-- Words recently taught in conversation -->
+We learned how to use the ~ni tsuite~ construction to mean "about". For example, 詩について話す (shi ni tsuite hanasu) means "talk about poetry."
+##

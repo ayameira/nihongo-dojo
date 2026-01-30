@@ -46,13 +46,22 @@ const TanukiSamurai: React.FC<{ budgetStatus: 'good' | 'warning' | 'danger'; onC
         <div className="tanuki-body">
           {/* Leaf on head */}
           <div className="tanuki-leaf" />
-          {/* Helmet */}
+          {/* Helmet with kuwagata horns */}
           <div className="tanuki-helmet" />
+          <div className="tanuki-horn left" />
+          <div className="tanuki-horn right" />
+          <div className="tanuki-horn-center" />
           {/* Face */}
           <div className="tanuki-face">
+            <div className="tanuki-muzzle" />
+            <div className="tanuki-eye-patch left" />
+            <div className="tanuki-eye-patch right" />
+            <div className="tanuki-eyebrow left" />
+            <div className="tanuki-eyebrow right" />
             <div className="tanuki-eye left" />
             <div className="tanuki-eye right" />
             <div className="tanuki-nose" />
+            <div className="tanuki-whiskers" />
             {budgetStatus === 'danger' && <div className="tanuki-sweat" />}
           </div>
           {/* Ears */}
@@ -60,6 +69,12 @@ const TanukiSamurai: React.FC<{ budgetStatus: 'good' | 'warning' | 'danger'; onC
           <div className="tanuki-ear right" />
           {/* Body/armor */}
           <div className="tanuki-armor" />
+          {/* Shoulder guards */}
+          <div className="tanuki-sode left" />
+          <div className="tanuki-sode right" />
+          {/* Paws */}
+          <div className="tanuki-paw left" />
+          <div className="tanuki-paw right" />
           {/* Katana */}
           <div className="tanuki-katana" />
           {/* Tail */}
