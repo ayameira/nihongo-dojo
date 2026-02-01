@@ -21,12 +21,12 @@ class ChatRequest(BaseModel):
 async def generate_stream(request: ChatRequest, settings, background_tasks: BackgroundTasks):
     """Generate SSE stream for chat response."""
     from app.core.gemini_client import GeminiClient
-    from app.core.context_builder import build_context
-    from app.core.tools import execute_tool_call
+    from app.core.context_builder import build_tutor_context
     from app.db.database import async_session_maker
     from app.db.models import ChatMessage, TokenLog, ChatSession
     from app.services.request_logger import RequestLogger
     from app.services.memory_service import run_compaction_if_needed
+    from app.services.listener_service import run_listener
     from sqlalchemy import select
 
     request_logger = RequestLogger(settings.ai_logs_path)
@@ -43,29 +43,30 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
     try:
         client = GeminiClient(settings)
 
-        # Build context
-        context = await build_context(request.session_id, request.difficulty_feedback)
+        # Build context for Tutor agent (no tool instructions)
+        context = await build_tutor_context(request.session_id, request.difficulty_feedback)
 
         # Prepare message parts
         parts = [request.message]
         if request.image_data:
             parts.append({"mime_type": "image/jpeg", "data": request.image_data})
 
-        # Stream response with tool loop
+        # Stream response from Tutor agent (no tools)
         full_response = ""
-        tool_calls = []
         usage_data = None
 
-        async for chunk in client.stream_chat(context, parts, tool_executor=execute_tool_call):
+        # Create callback to log exact LLM payloads
+        async def log_payload(payload):
+            await request_logger.log_llm_payload(request.session_id, payload)
+
+        async for chunk in client.stream_chat(
+            context, parts,
+            tool_executor=None,
+            request_logger=log_payload,
+            use_tools=False,  # Tutor agent has no tools
+        ):
             if chunk["type"] == "text":
                 full_response += chunk["content"]
-                yield f"data: {json.dumps(chunk)}\n\n"
-            elif chunk["type"] == "tool_call":
-                # Tool call initiated - frontend can show indicator
-                tool_calls.append(chunk)
-                yield f"data: {json.dumps(chunk)}\n\n"
-            elif chunk["type"] == "tool_result":
-                # Tool executed, result sent back to model
                 yield f"data: {json.dumps(chunk)}\n\n"
             elif chunk["type"] == "usage":
                 usage_data = chunk
@@ -124,6 +125,14 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
 
             await session.commit()
 
+            # Schedule Listener agent to extract facts in background
+            background_tasks.add_task(
+                run_listener,
+                request.session_id,
+                request.message,  # user message
+                full_response,    # tutor's response (for pronoun resolution)
+            )
+
             # Schedule memory compaction check as background task (non-blocking)
             background_tasks.add_task(run_compaction_if_needed, request.session_id)
 
@@ -139,7 +148,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             student_record_content=raw_context.get("student_record", ""),
             vocab_list=raw_context.get("vocab_list", []),
             full_response=full_response,
-            tool_calls=tool_calls,
+            tool_calls=[],  # Tutor agent has no tools
             usage_data=usage_data,
             model=settings.gemini_model,
         )
@@ -160,7 +169,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             student_record_content=raw_context.get("student_record", ""),
             vocab_list=raw_context.get("vocab_list", []),
             full_response=full_response if 'full_response' in dir() else "",
-            tool_calls=tool_calls if 'tool_calls' in dir() else [],
+            tool_calls=[],  # Tutor agent has no tools
             usage_data=usage_data if 'usage_data' in dir() else None,
             model=settings.gemini_model,
             error=str(e),

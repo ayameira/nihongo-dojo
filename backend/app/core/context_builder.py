@@ -1,54 +1,17 @@
 from typing import Optional, List, Dict
 from datetime import date
 
-from app.services.notes_service import NotesService
-from app.config import get_settings
+from app.core.agents import TUTOR_SYSTEM_PROMPT_TEMPLATE, LISTENER_SYSTEM_PROMPT_TEMPLATE
 
 
-SYSTEM_PROMPT_TEMPLATE = """Current Date: {today}
-
-You are a Japanese language tutor for an intermediate learner studying through immersion.
-
-## Core Principles
-- Default to responding in Japanese
-- Push the student to the edge of their ability (i+1 hypothesis)
-- Only switch to English for explicit grammar explanations, then immediately provide Japanese examples
-- Use vocabulary the student is currently learning when possible
-- Be a warm, personable tutor who remembers and cares about the student as a person
-
-## About This Student
-{student_record_content}
-
-## Conversation Summary (This Session)
-{session_summary}
-
-## Vocabulary Currently Being Learned
-{vocab_list_formatted}
-
-## Instructions for Difficulty
-- If user says something is "too hard", simplify slightly but don't overcompensate
-- If user says something is "too easy", increase complexity gradually
-
-## Tool Usage
-Use update_student_record when you learn something important about the student that helps you be a better tutor:
-- Goals: language learning goals and aspirations
-- Background: their context, why they're learning
-- Interests: hobbies, topics they enjoy discussing
-- Preferences: learning style preferences, what works for them
-- Notes: other important observations (grammar strengths/weaknesses, progress milestones)
-"""
-
-
-async def build_context(
+async def build_tutor_context(
     session_id: str,
     difficulty_feedback: Optional[str] = None
 ) -> Dict:
-    """Build the context for a Gemini chat request."""
-    settings = get_settings()
-    notes_service = NotesService()
-
-    # Load student record (long-term memory about the student)
-    student_record = await notes_service.read_notes(settings.student_record_path)
+    """Build the context for the Tutor agent (no tools, focused on teaching)."""
+    # Load student facts (long-term memory about the student)
+    student_facts = await fetch_student_facts()
+    student_facts_formatted = format_student_facts(student_facts)
 
     # Load session summary (compacted conversation history)
     session_summary = await get_session_summary(session_id)
@@ -59,10 +22,10 @@ async def build_context(
     # Format vocab list
     vocab_formatted = format_vocab_list(vocab_list)
 
-    # Build system prompt
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+    # Build system prompt using Tutor template (no tool instructions)
+    system_prompt = TUTOR_SYSTEM_PROMPT_TEMPLATE.format(
         today=date.today().isoformat(),
-        student_record_content=student_record or "(No student record yet)",
+        student_facts_formatted=student_facts_formatted,
         session_summary=session_summary or "(No previous conversation in this session)",
         vocab_list_formatted=vocab_formatted or "(No vocabulary loaded)",
     )
@@ -75,10 +38,37 @@ async def build_context(
         "chat_history": chat_history,
         # Raw data for logging
         "_raw": {
-            "student_record": student_record or "",
+            "student_facts": student_facts,
             "session_summary": session_summary or "",
             "vocab_list": vocab_list,
         },
+    }
+
+
+async def build_listener_context(
+    user_message: str,
+    tutor_message: str,
+) -> Dict:
+    """Build the context for the Listener agent (minimal, for fact extraction).
+
+    Args:
+        user_message: The student's message
+        tutor_message: The tutor's previous response (for pronoun resolution)
+    """
+    # Load current facts with IDs so Listener can reference them for edit/delete
+    student_facts = await fetch_student_facts()
+    student_facts_formatted = format_student_facts(student_facts)
+
+    # Build system prompt using Listener template
+    system_prompt = LISTENER_SYSTEM_PROMPT_TEMPLATE.format(
+        student_facts_formatted=student_facts_formatted,
+        tutor_message=tutor_message,
+        user_message=user_message,
+    )
+
+    return {
+        "system_prompt": system_prompt,
+        "user_message": user_message,
     }
 
 
@@ -119,11 +109,34 @@ def format_vocab_list(vocab_list: List[Dict]) -> str:
     lines = []
     for v in vocab_list:
         if v["kanji"]:
-            lines.append(f"- {v['kanji']} ({v['kana']}): {v['meaning']} [{v['pos']}]")
+            lines.append(f"- {v['kanji']} ({v['kana']})")
         else:
-            lines.append(f"- {v['kana']}: {v['meaning']} [{v['pos']}]")
+            lines.append(f"- {v['kana']}")
 
     return "\n".join(lines)
+
+
+async def fetch_student_facts() -> List[Dict]:
+    """Fetch all student facts from the database."""
+    from app.db.database import async_session_maker
+    from app.db.models import StudentFact
+    from sqlalchemy import select
+
+    try:
+        async with async_session_maker() as session:
+            stmt = select(StudentFact).order_by(StudentFact.created_at.asc())
+            result = await session.execute(stmt)
+            facts = result.scalars().all()
+            return [{"id": f.id, "content": f.content} for f in facts]
+    except Exception:
+        return []
+
+
+def format_student_facts(facts: List[Dict]) -> str:
+    """Format student facts as a list with IDs."""
+    if not facts:
+        return "(No information recorded yet)"
+    return "\n".join(f"- [{f['id']}] {f['content']}" for f in facts)
 
 
 async def get_session_summary(session_id: str) -> Optional[str]:

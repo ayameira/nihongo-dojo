@@ -6,36 +6,102 @@ This document provides a detailed reference of all AI interactions in Nihongo Do
 
 ## Table of Contents
 
-1. [System Prompt](#1-system-prompt)
-2. [Memory Injections](#2-memory-injections)
-3. [Tool Definitions](#3-tool-definitions)
-4. [Tool Loop Mechanism](#4-tool-loop-mechanism)
-5. [Background Memory Compaction](#5-background-memory-compaction)
-6. [Request/Response Logging](#6-requestresponse-logging)
-7. [File Reference](#7-file-reference)
+1. [Architecture Overview](#1-architecture-overview)
+2. [System Prompt](#2-system-prompt)
+3. [Memory Injections](#3-memory-injections)
+4. [Tool Definitions](#4-tool-definitions)
+5. [Tool Loop Mechanism](#5-tool-loop-mechanism)
+6. [Background Memory Compaction](#6-background-memory-compaction)
+7. [Request/Response Logging](#7-requestresponse-logging)
+8. [File Reference](#8-file-reference)
 
 ---
 
-## 1. System Prompt
+## 1. Architecture Overview
 
-**File:** `backend/app/core/context_builder.py:8-47`
+Nihongo Dojo uses Google's Gemini API (gemini-3-flash-preview) with a **two-agent architecture**:
 
-The system prompt is a template with dynamic injections. Here is the complete template:
+1. **Tutor Agent** - Synchronous, SSE streaming, focused purely on teaching (NO tools)
+2. **Listener Agent** - Background task, extracts student facts from messages (uses tools)
+
+This separation allows the Tutor to focus 100% on high-quality teaching while the Listener handles fact management in the background without blocking the user experience.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                       NIHONGO DOJO - TWO-AGENT ARCHITECTURE                      │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+User Message ──► POST /api/chat/stream
+                        │
+                        ▼
+              ┌─────────────────────────────────────────────────────────────────┐
+              │                     CHAT ENDPOINT (chat.py)                      │
+              └─────────────────────────────────────────────────────────────────┘
+                        │
+        ┌───────────────┴───────────────┐
+        │                               │
+        ▼                               ▼ (Background Task)
+┌───────────────────────┐     ┌───────────────────────────────────────────────┐
+│    TUTOR AGENT        │     │              LISTENER AGENT                    │
+│  (Synchronous SSE)    │     │            (Background Task)                   │
+├───────────────────────┤     ├───────────────────────────────────────────────┤
+│                       │     │                                               │
+│ Context:              │     │ Context (minimal):                            │
+│ • Student facts       │     │ • Student facts (with IDs)                    │
+│ • Session summary     │     │ • Tutor's response                            │
+│ • Vocab (Learning)    │     │ • User's message                              │
+│ • Chat history (30)   │     │                                               │
+│                       │     │ Tool: manage_student_facts                    │
+│ NO TOOLS              │     │ • add / edit / delete facts                   │
+│ Pure teaching focus   │     │                                               │
+│                       │     │ Non-streaming, logs results                   │
+├───────────────────────┤     ├───────────────────────────────────────────────┤
+│ Output Events:        │     │ Updates:                                      │
+│ • text                │     │ • student_facts DB (source="listener")        │
+│ • usage               │     │                                               │
+│ • done                │     │ Facts ready for next conversation turn        │
+└───────────────────────┘     └───────────────────────────────────────────────┘
+        │
+        ▼
+   SSE Stream to Frontend
+```
+
+### Why Two Agents?
+
+| Benefit | Description |
+|---------|-------------|
+| **Faster responses** | Tutor doesn't wait for tool execution |
+| **Better teaching** | Tutor prompt is 100% focused on pedagogy, no tool instructions |
+| **Lower latency** | User sees response immediately, facts updated in background |
+| **Pronoun resolution** | Listener sees both tutor question and user answer to understand "it", "that", etc. |
+
+---
+
+## 2. System Prompts
+
+The system uses **two separate prompts** for the Tutor and Listener agents.
+
+**Files:** `backend/app/core/agents.py`
+
+### 2.1 Tutor System Prompt
+
+The Tutor prompt focuses purely on teaching with **NO tool instructions**:
 
 ```
 Current Date: {today}
 
-You are a Japanese language tutor for an intermediate learner studying through immersion.
+You are a Japanese language tutor.
 
 ## Core Principles
-- Default to responding in Japanese
 - Push the student to the edge of their ability (i+1 hypothesis)
-- Only switch to English for explicit grammar explanations, then immediately provide Japanese examples
 - Use vocabulary the student is currently learning when possible
+- Repetition is key for learning: use the same vocabulary and grammatical
+  constructions that the user is currently learning or has been struggling with.
+  However, always use it in new phrases and contexts.
 - Be a warm, personable tutor who remembers and cares about the student as a person
 
 ## About This Student
-{student_record_content}
+{student_facts_formatted}
 
 ## Conversation Summary (This Session)
 {session_summary}
@@ -46,74 +112,152 @@ You are a Japanese language tutor for an intermediate learner studying through i
 ## Instructions for Difficulty
 - If user says something is "too hard", simplify slightly but don't overcompensate
 - If user says something is "too easy", increase complexity gradually
-
-## Tool Usage
-Use update_student_record when you learn something important about the student (goals, interests, background, preferences, or anything that helps you be a better tutor for them)
 ```
+
+**Note:** The Tutor prompt has NO tool usage section - all fact management is handled by the Listener.
+
+### 2.2 Listener System Prompt
+
+The Listener prompt is minimal and focused on fact extraction:
+
+```
+You are a silent observer for a Japanese tutoring application.
+Your ONLY job is to extract and manage facts about the student based on their conversation.
+
+## Current Student Facts (with IDs for reference)
+{student_facts_formatted}
+
+## Conversation Exchange
+Tutor: {tutor_message}
+Student: {user_message}
+
+## Task
+Analyze the student's message in context of the tutor's question. If needed:
+- add: New permanent info about the student (goals, interests, background, preferences)
+- edit: Update an existing fact if new information contradicts or refines it (provide fact_id)
+- delete: Remove a fact that is no longer accurate (provide fact_id)
+
+If NO fact changes are needed, do not call the tool.
+
+## Important Rules
+- Only extract PERMANENT facts about the student as a person
+- Do NOT record transient conversation topics or grammar points (handled by compaction)
+- Use the Tutor's question to understand pronouns like "it", "that", "this" in the response
+```
+
+**Key difference:** The Listener receives both the tutor's message AND the user's message to resolve pronouns (e.g., "Do you like natto?" + "No, I hate it" → "User hates natto").
 
 ### Injection Points
 
+**Tutor Agent Variables:**
+
 | Variable | Source | Description |
 |----------|--------|-------------|
-| `{today}` | `date.today().isoformat()` | Current date in ISO format (e.g., "2024-01-15") |
-| `{student_record_content}` | `STUDENT_RECORD.md` file | Long-term memory about the student |
-| `{session_summary}` | `chat_sessions.summary` column | Compacted summary of archived messages from this session |
+| `{today}` | `date.today().isoformat()` | Current date in ISO format |
+| `{student_facts_formatted}` | `student_facts` table | Long-term memory: `- [1] fact...` |
+| `{session_summary}` | `chat_sessions.summary` | Compacted summary from this session |
 | `{vocab_list_formatted}` | SQLite database | All vocabulary with status="Learning" |
 
-### System Prompt Injection Logic
+**Listener Agent Variables:**
 
-**File:** `backend/app/core/gemini_client.py:78-85`
+| Variable | Source | Description |
+|----------|--------|-------------|
+| `{student_facts_formatted}` | `student_facts` table | Facts with IDs for edit/delete |
+| `{tutor_message}` | Previous Tutor response | For pronoun resolution |
+| `{user_message}` | Current user message | The message being analyzed |
+
+### Context Building
+
+**Files:** `backend/app/core/context_builder.py`
 
 ```python
-# Include system prompt only if no history (first message of session)
-if system_prompt and not context.get("chat_history"):
-    parts.append(f"[System Instructions]\n{system_prompt}\n[End System Instructions]\n\n")
-```
+# Tutor context - full teaching context
+async def build_tutor_context(session_id, difficulty_feedback) -> Dict:
+    # Returns: system_prompt, chat_history, _raw (for logging)
 
-**Important:** The system prompt is only injected on the **first message** of a chat session (when there's no history). On subsequent messages, the chat history carries the context forward.
+# Listener context - minimal for fact extraction
+async def build_listener_context(user_message, tutor_message) -> Dict:
+    # Returns: system_prompt, user_message
+```
 
 ---
 
-## 2. Memory Injections
+## 3. Memory Injections
 
-### 2.1 Student Record (Long-term Memory)
+### Memory Architecture
 
-**Source File:** `STUDENT_RECORD.md` (configurable via `student_record_path`)
-
-**Loaded at:** `backend/app/core/context_builder.py:59`
-
-**Sections:**
-- `## Goals` - Language learning goals and aspirations
-- `## Background` - Why they're learning, their situation
-- `## Interests` - Hobbies, topics they enjoy
-- `## Preferences` - Learning style preferences
-- `## Notes` - Other important information
-
-**Default Template:**
-```markdown
-# Student Record
-
-## Goals
-<!-- The student's language learning goals and aspirations -->
-
-## Background
-<!-- Context about the student - why they're learning, their situation -->
-
-## Interests
-<!-- Hobbies, topics they enjoy discussing, favorite things -->
-
-## Preferences
-<!-- Learning style preferences, what works well for them -->
-
-## Notes
-<!-- Other important information about the student -->
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         MEMORY MANAGEMENT                                        │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│   ┌─────────────────────┐      Long-term memory about the student              │
+│   │   StudentFact       │      (flat list of facts with IDs)                   │
+│   │  (student_facts)    │                                                      │
+│   ├─────────────────────┤                                                      │
+│   │ id (PK)             │      Example in prompt:                              │
+│   │ content             │      - [1] Learning Japanese for travel              │
+│   │ source              │      - [2] Likes anime, especially Naruto            │
+│   │ created_at          │      - [3] Works as a software engineer              │
+│   │ updated_at          │                                                      │
+│   └─────────────────────┘                                                      │
+│                                                                                 │
+│   ┌─────────────────────┐      ┌─────────────────────┐                         │
+│   │    ChatSession      │      │    ChatMessage      │                         │
+│   │  (chat_sessions)    │      │   (chat_history)    │                         │
+│   ├─────────────────────┤      ├─────────────────────┤                         │
+│   │ id (PK)             │◄────┐│ id (PK)             │                         │
+│   │ name                │     ││ session_id (FK)  ───┘                         │
+│   │ summary             │     ││ role (user/assistant)                         │
+│   │ preview             │     ││ content             │                         │
+│   │ message_count       │     ││ image_data (base64) │                         │
+│   │ created_at          │     ││ is_archived         │                         │
+│   │ updated_at          │     ││ token_count         │                         │
+│   └─────────────────────┘     ││ created_at          │                         │
+│                               │└─────────────────────┘                         │
+│                               │                                                │
+│   Context Window:             │   ┌─────────────────────┐                      │
+│   • Last 30 non-archived msgs │   │    VocabEntry       │                      │
+│   • System prompt on first msg│   │  (vocab_entries)    │                      │
+│   • ALL Learning vocab        │   ├─────────────────────┤                      │
+│   • Session summary           │   │ kanji, kana         │                      │
+│   • ALL student facts         │   │ meaning, pos        │                      │
+│                               │   │ status="Learning"   │                      │
+│                               │   └─────────────────────┘                      │
+│                               │   ALL Learning vocab in context                │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 Vocabulary List
+### 3.1 Student Facts (Long-term Memory)
+
+**Source:** SQLite database, `student_facts` table
+
+**Loaded at:** `backend/app/core/context_builder.py:129-142`
+
+**Schema:**
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | Integer (PK) | Unique identifier shown to AI as `[id]` |
+| `content` | Text | The fact text |
+| `source` | String | `tutor`, `compaction`, or `manual` |
+
+**Format in prompt:**
+```
+- [1] Learning Japanese for travel to Tokyo
+- [2] Likes anime, especially Naruto (favorite character: Kakashi)
+- [3] Works as a software engineer
+- [4] Prefers conversational practice over textbook exercises
+```
+
+The IDs in brackets allow the AI to reference specific facts when editing or deleting.
+
+**See also:** [Student Facts Logic](./STUDENT_FACTS_LOGIC.md) for full details.
+
+### 3.2 Vocabulary List
 
 **Source:** SQLite database, `vocab_entries` table
 
-**Query:** `backend/app/core/context_builder.py:93-119`
+**Query:** `backend/app/core/context_builder.py:85-111`
 
 ```python
 stmt = (
@@ -125,18 +269,18 @@ stmt = (
 
 **Filter:** Only entries with `status == "Learning"` (no limit)
 
-**Format:** `backend/app/core/context_builder.py:122-134`
+**Format:** `backend/app/core/context_builder.py:114-126`
 ```
 - 食べる (たべる): to eat [verb]
 - 元気 (げんき): healthy, energetic [na-adj]
 - すごい: amazing [i-adj]
 ```
 
-### 2.3 Chat History
+### 3.3 Chat History
 
 **Source:** SQLite database, `chat_history` table
 
-**Query:** `backend/app/core/context_builder.py`
+**Query:** `backend/app/core/context_builder.py:144-172`
 
 ```python
 stmt = (
@@ -150,7 +294,7 @@ stmt = (
 
 **Limit:** 30 non-archived messages per session
 
-**Archived Messages:** When a session exceeds 30 messages, the oldest 10 are compacted into a summary and marked as `is_archived=True`. These archived messages are excluded from the chat history but their content is preserved in the session summary (see [Background Memory Compaction](#5-background-memory-compaction)).
+**Archived Messages:** When a session exceeds 30 messages, the oldest 10 are compacted into a summary and marked as `is_archived=True`. These archived messages are excluded from the chat history but their content is preserved in the session summary (see [Background Memory Compaction](#6-background-memory-compaction)).
 
 **Format:** Converted to Gemini format:
 ```python
@@ -162,11 +306,11 @@ stmt = (
 
 **Injection:** Passed to `model.start_chat(history=chat_history)` at `gemini_client.py:74-76`
 
-### 2.4 Session Summary (Compacted History)
+### 3.4 Session Summary (Compacted History)
 
 **Source:** SQLite database, `chat_sessions.summary` column
 
-**Query:** `backend/app/core/context_builder.py`
+**Query:** `backend/app/core/context_builder.py:129-141`
 
 ```python
 stmt = select(ChatSession.summary).where(ChatSession.id == session_id)
@@ -178,77 +322,102 @@ stmt = select(ChatSession.summary).where(ChatSession.id == session_id)
 
 ---
 
-## 3. Tool Definitions
+## 4. Tool Definitions
 
 **File:** `backend/app/core/tools.py`
 
-### 3.1 update_student_record
+### 4.1 manage_student_facts
 
-**Definition:** Lines 32-55
+**Definition:** Lines 7-29
 
-**Purpose:** Update long-term memory (STUDENT_RECORD.md)
+**Purpose:** Manage long-term memory (student_facts table)
 
 **Description sent to model:**
-> "Update the student's long-term record with important information about them. Use this to remember things that help you be a better tutor: their goals, interests, background, learning preferences, personal details they share, or anything else worth remembering about them as a person."
+> "Manage long-term facts about the student. Use this to remember important information that helps you be a better tutor: their goals, interests, background, learning preferences, personal details, or progress observations. Facts are stored permanently across sessions."
 
 **Parameters:**
 
-| Name | Type | Required | Values | Description |
-|------|------|----------|--------|-------------|
-| `section` | string | Yes | `goals`, `background`, `interests`, `preferences`, `notes` | Which section to update |
-| `action` | string | Yes | `append`, `replace` | Whether to append to or replace content |
-| `content` | string | Yes | (any) | Markdown content to add or replace |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `action` | string | Yes | `add`, `edit`, or `delete` |
+| `content` | string | For add/edit | The fact text (new or updated) |
+| `fact_id` | integer | For edit/delete | The ID of the fact to modify |
 
-**Execution:** `backend/app/core/tools.py:98-117`
+**Example tool calls:**
 
-Calls `NotesService.update_student_record_section()` which modifies `STUDENT_RECORD.md`
+```json
+// Add a new fact
+{"action": "add", "content": "Enjoys discussing travel experiences"}
+
+// Edit existing fact
+{"action": "edit", "fact_id": 2, "content": "Loves anime, especially Naruto and One Piece"}
+
+// Delete a fact
+{"action": "delete", "fact_id": 3}
+```
+
+**Execution:** `backend/app/core/tools.py:34-109`
+
+Directly queries/modifies the `student_facts` SQLite table.
 
 ### Tool Registration
 
 **File:** `backend/app/core/tools.py`
 
 ```python
-ALL_TOOLS = [UPDATE_STUDENT_RECORD_TOOL]
+ALL_TOOLS = [MANAGE_STUDENT_FACTS_TOOL]
 ```
 
 **Conversion to Gemini format:** `backend/app/core/gemini_client.py:25-45`
 
+**See also:** [Student Facts Logic](./STUDENT_FACTS_LOGIC.md) for full tool documentation.
+
 ---
 
-## 4. Tool Loop Mechanism
+## 5. Tool Loop Mechanism
 
-**File:** `backend/app/core/gemini_client.py:59-196`
+**File:** `backend/app/core/gemini_client.py`
 
-The agent uses a **tool loop** that allows it to execute tools and then continue generating a response.
+Tools are now **only used by the Listener agent** (background). The Tutor agent has no tools.
 
-### Flow Diagram
+### Tutor Agent (No Tools)
+
+The Tutor uses `stream_chat()` with `use_tools=False`:
+
+```python
+async for chunk in client.stream_chat(
+    context, parts,
+    tool_executor=None,
+    use_tools=False,  # Tutor has no tools
+):
+    # Only yields: text, usage
+```
+
+**Events to Frontend:**
+
+| Event Type | Data |
+|------------|------|
+| `text` | `{type, content}` |
+| `usage` | `{type, input_tokens, output_tokens, cost_usd}` |
+| `done` | `{type}` |
+
+### Listener Agent (Tool Loop)
+
+The Listener uses `generate_with_tools()` for non-streaming generation with tool loop:
 
 ```
-User sends message
+Listener receives (user_message, tutor_message)
         │
         ▼
 ┌─────────────────────────────────────┐
-│  Build message parts                │
-│  (system prompt + user message)     │
-│                                     │
-│  File: gemini_client.py:81-97       │
+│  Build Listener context             │
+│  (facts, tutor msg, user msg)       │
 └─────────────────────────────────────┘
         │
         ▼
 ┌─────────────────────────────────────┐
 │  Send to Gemini                     │
 │  chat.send_message(parts)           │
-│                                     │
-│  File: gemini_client.py:109-111     │
-└─────────────────────────────────────┘
-        │
-        ▼
-┌─────────────────────────────────────┐
-│  Parse response                     │
-│  - Extract function_calls           │
-│  - Extract text_parts               │
-│                                     │
-│  File: gemini_client.py:126-131     │
 └─────────────────────────────────────┘
         │
         ▼
@@ -258,49 +427,43 @@ User sends message
        │            │
        ▼            ▼
 ┌──────────────┐  ┌──────────────────┐
-│ Execute each │  │ Yield text parts │
-│ tool call    │  │ and exit loop    │
-│              │  │                  │
-│ Lines 137-163│  │ Lines 170-176    │
+│ Execute each │  │ Return result    │
+│ tool call    │  │ (no changes)     │
+│ (add/edit/   │  │                  │
+│  delete)     │  │                  │
 └──────────────┘  └──────────────────┘
        │
        ▼
 ┌─────────────────────────────────────┐
 │  Send function responses back       │
 │  to Gemini                          │
-│                                     │
-│  parts = function_responses         │
-│  continue  # loop again             │
-│                                     │
-│  File: gemini_client.py:165-168     │
+│  continue loop...                   │
 └─────────────────────────────────────┘
        │
-       └──────► (back to Send to Gemini)
+       └──────► (max 10 iterations)
 ```
 
 ### Safety Limit
 
-**File:** `gemini_client.py:101`
-
 ```python
-max_tool_iterations = 10  # Safety limit
+max_iterations = 10  # Safety limit
 ```
 
-The loop will exit after 10 iterations to prevent infinite loops.
+### Listener Result (Logged, Not Sent to Frontend)
 
-### Events Yielded to Frontend
-
-| Event Type | When | Data |
-|------------|------|------|
-| `tool_call` | Agent requests a tool | `{type, name, args}` |
-| `tool_result` | Tool executed | `{type, name, result}` |
-| `text` | Final response text | `{type, content}` |
-| `usage` | After completion | `{type, input_tokens, output_tokens, cost_usd}` |
-| `error` | On exception | `{type, content}` |
+```python
+{
+    "status": "success",
+    "tool_calls": [
+        {"name": "manage_student_facts", "args": {...}, "result": "..."}
+    ],
+    "usage": {"input_tokens": N, "output_tokens": N, "cost_usd": 0.001}
+}
+```
 
 ---
 
-## 5. Background Memory Compaction
+## 6. Background Memory Compaction
 
 **File:** `backend/app/services/memory_service.py`
 
@@ -312,7 +475,7 @@ When a chat session accumulates 30+ active (non-archived) messages, the system:
 1. Selects the oldest 10 non-archived messages
 2. Sends them to Gemini with a summarization prompt
 3. Generates a session summary (stored in `chat_sessions.summary`)
-4. Extracts any new student facts (appended to `STUDENT_RECORD.md`)
+4. Extracts any new student facts (inserted into `student_facts` table with `source="compaction"`)
 5. Marks the 10 messages as `is_archived=True`
 
 ### Trigger Mechanism
@@ -332,7 +495,7 @@ This ensures compaction never blocks the user's chat experience.
 
 ### Compaction Prompt
 
-**File:** `backend/app/services/memory_service.py`
+**File:** `backend/app/services/memory_service.py:31-62`
 
 The compaction AI receives a specialized prompt (different from the tutor prompt):
 
@@ -360,7 +523,7 @@ If yes, extract it. If no, return null.
 | Channel | Destination | Purpose |
 |---------|-------------|---------|
 | **Session Summary** | `chat_sessions.summary` column | Preserves conversation context within the session |
-| **Student Facts** | `STUDENT_RECORD.md` (Notes section) | Extracts permanent info to long-term memory |
+| **Student Facts** | `student_facts` table (`source="compaction"`) | Extracts permanent info to long-term memory |
 
 ### Database Schema
 
@@ -417,8 +580,8 @@ User sends message #31
                      ▼
              ┌──────────────────┐
              │ If facts found,  │
-             │ update STUDENT_  │
-             │ RECORD.md        │
+             │ insert into      │
+             │ student_facts DB │
              └──────────────────┘
                      │
                      ▼
@@ -434,7 +597,7 @@ User sends message #31
 |---------------|----------|
 | Gemini API error | Log error, do NOT archive messages (retry on next trigger) |
 | Database save error | Log error, rollback, do NOT archive |
-| Notes service error | Log error, but still save summary (partial success) |
+| Facts insertion error | Log error, but still save summary (partial success) |
 
 Messages are only marked as archived **after** the summary is successfully saved, ensuring no data loss.
 
@@ -449,7 +612,7 @@ Messages are only marked as archived **after** the summary is successfully saved
 
 ---
 
-## 6. Request/Response Logging
+## 7. Request/Response Logging
 
 **File:** `backend/app/services/request_logger.py`
 
@@ -470,7 +633,7 @@ logs/ai_interactions/
 {
   "timestamp": "2024-01-15T10:30:45.123456",
   "session_id": "abc-123",
-  "model": "gemini-2.0-flash",
+  "model": "gemini-3-flash-preview",
 
   "request": {
     "user_message": "こんにちは！",
@@ -486,9 +649,10 @@ logs/ai_interactions/
       {"role": "model", "parts": ["Previous response"]}
     ],
     "chat_history_count": 30,
-    "files": {
-      "student_record": "# Student Record\n\n## Goals..."
-    },
+    "student_facts": [
+      {"id": 1, "content": "Likes anime"},
+      {"id": 2, "content": "Learning for travel"}
+    ],
     "vocabulary": {
       "items": [
         {"kanji": "食べる", "kana": "たべる", "meaning": "to eat", "pos": "verb"}
@@ -502,8 +666,8 @@ logs/ai_interactions/
     "tool_calls": [
       {
         "type": "tool_call",
-        "name": "update_student_record",
-        "args": {"section": "notes", "action": "append", "content": "..."}
+        "name": "manage_student_facts",
+        "args": {"action": "add", "content": "Enjoys travel discussions"}
       }
     ],
     "tool_calls_count": 1
@@ -523,7 +687,7 @@ logs/ai_interactions/
 
 | Issue | Check in Log |
 |-------|--------------|
-| Agent not remembering context | `context.system_prompt` - is student record populated? |
+| Agent not remembering context | `context.student_facts` - are facts populated? |
 | Agent not using vocabulary | `context.vocabulary.items` - are words present? |
 | Agent not responding after tool use | `response.tool_calls` vs `response.content` |
 | Wrong behavior | `context.system_prompt` - check instructions |
@@ -531,33 +695,40 @@ logs/ai_interactions/
 
 ---
 
-## 7. File Reference
+## 8. File Reference
 
 ### Core AI Files
 
 | File | Purpose | Key Functions/Variables |
 |------|---------|------------------------|
-| `backend/app/core/context_builder.py` | Builds system prompt and context | `SYSTEM_PROMPT_TEMPLATE`, `build_context()`, `get_session_summary()` |
-| `backend/app/core/gemini_client.py` | Gemini API client with tool loop | `GeminiClient`, `stream_chat()`, `generate_json()` |
-| `backend/app/core/tools.py` | Tool definitions and execution | `ALL_TOOLS`, `execute_tool_call()` |
-| `backend/app/api/chat.py` | HTTP endpoint, orchestration | `generate_stream()`, BackgroundTasks integration |
-| `backend/app/services/notes_service.py` | File-based notes management | `NotesService` |
+| `backend/app/core/agents.py` | Agent configurations and prompts | `TUTOR_SYSTEM_PROMPT_TEMPLATE`, `LISTENER_SYSTEM_PROMPT_TEMPLATE` |
+| `backend/app/core/context_builder.py` | Builds context for each agent | `build_tutor_context()`, `build_listener_context()`, `fetch_student_facts()` |
+| `backend/app/core/gemini_client.py` | Gemini API client | `stream_chat()` (Tutor), `generate_with_tools()` (Listener), `generate_json()` (compaction) |
+| `backend/app/core/tools.py` | Tool definitions and execution | `ALL_TOOLS`, `execute_manage_student_facts()` |
+| `backend/app/api/chat.py` | HTTP endpoint, orchestration | `generate_stream()`, triggers both Tutor and Listener |
+| `backend/app/api/notes.py` | Student facts REST API | CRUD endpoints for facts |
+| `backend/app/services/listener_service.py` | Background fact extraction | `ListenerService`, `run_listener()` |
 | `backend/app/services/memory_service.py` | Background memory compaction | `MemoryService`, `run_compaction_if_needed()` |
 | `backend/app/services/request_logger.py` | Interaction logging | `RequestLogger` |
 
-### Memory Files
+### Database Tables
 
-| File | Purpose | Updated By |
-|------|---------|------------|
-| `STUDENT_RECORD.md` | Long-term student info | `update_student_record` tool, memory compaction |
+| Table | Purpose | Updated By |
+|-------|---------|------------|
+| `student_facts` | Long-term student info | `manage_student_facts` tool, memory compaction, REST API |
 
 ### Configuration
 
 | Setting | File | Default |
 |---------|------|---------|
-| `student_record_path` | `backend/app/config.py` | `./STUDENT_RECORD.md` |
 | `ai_logs_path` | `backend/app/config.py` | `./logs/ai_interactions` |
-| `gemini_model` | `backend/app/config.py` | `gemini-2.0-flash` |
+| `gemini_model` | `backend/app/config.py` | `gemini-3-flash-preview` |
+
+### Related Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Student Facts Logic](./STUDENT_FACTS_LOGIC.md) | Detailed documentation of the student facts system |
 
 ---
 
@@ -565,7 +736,10 @@ logs/ai_interactions/
 
 1. **Check the logs:** `logs/ai_interactions/{date}/{session}/`
 2. **Verify system prompt:** Is it being injected? (only on first message)
-3. **Check memory file:** Is `STUDENT_RECORD.md` being updated?
+3. **Check student facts:** Are facts in the database?
+   ```sql
+   SELECT id, content, source FROM student_facts ORDER BY created_at;
+   ```
 4. **Tool execution:** Are tools being called? Check `tool_calls` in logs
 5. **Tool loop:** Is the agent responding after tool use? Check for `text` content after `tool_result`
 6. **Token usage:** Are costs reasonable? Check `usage` in logs
@@ -576,6 +750,9 @@ logs/ai_interactions/
 
    -- Check session summary
    SELECT id, summary FROM chat_sessions WHERE id = 'your-session-id';
+
+   -- Check facts from compaction
+   SELECT * FROM student_facts WHERE source = 'compaction';
    ```
 8. **Compaction not triggering?** Verify active message count >= 30:
    ```sql

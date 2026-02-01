@@ -1,7 +1,9 @@
 import google.generativeai as genai
-from typing import AsyncGenerator, Dict, List, Any, Optional
+from typing import AsyncGenerator, Callable, Dict, List, Any, Optional
 import asyncio
+import base64
 import logging
+from datetime import datetime
 
 from app.config import Settings
 from app.core.tools import ALL_TOOLS
@@ -16,11 +18,6 @@ class GeminiClient:
 
         # Convert tool definitions to Gemini format
         self.tools = self._convert_tools()
-
-        self.model = genai.GenerativeModel(
-            model_name=settings.gemini_model,
-            tools=self.tools,
-        )
 
     def _convert_tools(self) -> List:
         """Convert our tool definitions to Gemini function declarations."""
@@ -56,41 +53,133 @@ class GeminiClient:
         }
         return type_map.get(type_str, genai.protos.Type.STRING)
 
+    def _serialize_parts_for_logging(self, parts: List[Any]) -> List[Dict]:
+        """Convert parts to JSON-serializable format for logging.
+
+        Handles:
+        - Strings -> {"text": "..."}
+        - Image dicts with bytes -> {"inline_data": {"mime_type": "...", "data": "base64..."}}
+        - FunctionResponse protos -> {"function_response": {"name": "...", "response": {...}}}
+        """
+        serialized = []
+        for part in parts:
+            if isinstance(part, str):
+                serialized.append({"text": part})
+            elif isinstance(part, dict):
+                if "data" in part:
+                    # Image data - ensure it's base64 string
+                    data = part["data"]
+                    if isinstance(data, bytes):
+                        data = base64.b64encode(data).decode("utf-8")
+                    serialized.append({
+                        "inline_data": {
+                            "mime_type": part.get("mime_type", "image/jpeg"),
+                            "data": data,
+                        }
+                    })
+                else:
+                    # Other dict, pass through
+                    serialized.append(part)
+            elif hasattr(part, "function_response"):
+                # FunctionResponse proto
+                fr = part.function_response
+                serialized.append({
+                    "function_response": {
+                        "name": fr.name,
+                        "response": dict(fr.response),
+                    }
+                })
+            else:
+                # Unknown type, try to convert
+                serialized.append({"text": str(part)})
+        return serialized
+
+    def _build_payload_for_logging(
+        self,
+        system_prompt: str,
+        chat_history: List[Dict],
+        current_parts: List[Any],
+        iteration: int,
+    ) -> Dict:
+        """Build the complete payload for logging in Gemini REST API format."""
+        # Build contents array: history + current message
+        contents = []
+
+        # Add history (already in correct format)
+        for msg in chat_history:
+            role = msg.get("role", "user")
+            parts = msg.get("parts", [])
+            # Convert parts to proper format
+            formatted_parts = []
+            for p in parts:
+                if isinstance(p, str):
+                    formatted_parts.append({"text": p})
+                elif isinstance(p, dict):
+                    formatted_parts.append(p)
+                else:
+                    formatted_parts.append({"text": str(p)})
+            contents.append({"role": role, "parts": formatted_parts})
+
+        # Add current message
+        contents.append({
+            "role": "user",
+            "parts": self._serialize_parts_for_logging(current_parts),
+        })
+
+        # Build tools in REST API format
+        tools = [{
+            "function_declarations": ALL_TOOLS
+        }]
+
+        return {
+            "model": self.settings.gemini_model,
+            "system_instruction": {"parts": [{"text": system_prompt}]} if system_prompt else None,
+            "contents": contents,
+            "tools": tools,
+            "iteration": iteration,
+            "timestamp": datetime.now().isoformat(),
+        }
+
     async def stream_chat(
         self,
         context: Dict,
         message_parts: List[Any],
-        tool_executor: Optional[callable] = None,
+        tool_executor: Optional[Callable] = None,
+        request_logger: Optional[Callable] = None,
+        use_tools: bool = True,
     ) -> AsyncGenerator[Dict, None]:
-        """Stream a chat response from Gemini with tool loop support.
+        """Stream a chat response from Gemini with optional tool loop support.
 
         Args:
             context: Contains system_prompt and chat_history
             message_parts: User message parts (text, images)
             tool_executor: Async function to execute tools: async (name, args) -> result
+            request_logger: Async function to log request payload: async (payload) -> None
+            use_tools: Whether to enable tool usage (default True, set False for Tutor agent)
         """
         try:
-            # Start chat with history
-            chat = self.model.start_chat(
-                history=context.get("chat_history", [])
+            # Get system prompt and chat history from context
+            system_prompt = context.get("system_prompt", "")
+            chat_history = context.get("chat_history", [])
+
+            # Create model with system instruction (per-request since system prompt varies)
+            # Only include tools if use_tools is True
+            model = genai.GenerativeModel(
+                model_name=self.settings.gemini_model,
+                tools=self.tools if use_tools else None,
+                system_instruction=system_prompt if system_prompt else None,
             )
 
-            # Build content with system instruction in first user message
-            system_prompt = context.get("system_prompt", "")
+            # Start chat with history
+            chat = model.start_chat(history=chat_history)
 
-            # Prepare parts - include system context
+            # Prepare user message parts (no longer embedding system prompt)
             parts = []
-            if system_prompt and not context.get("chat_history"):
-                # Include system prompt only if no history (first message)
-                parts.append(f"[System Instructions]\n{system_prompt}\n[End System Instructions]\n\n")
-
-            # Add user message parts
             for part in message_parts:
                 if isinstance(part, str):
                     parts.append(part)
                 elif isinstance(part, dict) and "data" in part:
                     # Image data
-                    import base64
                     parts.append({
                         "mime_type": part.get("mime_type", "image/jpeg"),
                         "data": base64.b64decode(part["data"]) if isinstance(part["data"], str) else part["data"],
@@ -102,6 +191,24 @@ class GeminiClient:
             iteration = 0
 
             while iteration < max_tool_iterations:
+                # Log the exact payload before sending
+                if request_logger:
+                    # Use chat.history to get current state (grows during tool loop)
+                    current_history = [
+                        {"role": msg.role, "parts": [p.text if hasattr(p, 'text') else str(p) for p in msg.parts]}
+                        for msg in chat.history
+                    ] if chat.history else chat_history
+                    payload = self._build_payload_for_logging(
+                        system_prompt=system_prompt,
+                        chat_history=current_history,
+                        current_parts=parts,
+                        iteration=iteration,
+                    )
+                    try:
+                        await request_logger(payload)
+                    except Exception as e:
+                        logger.warning(f"Failed to log request payload: {e}")
+
                 iteration += 1
 
                 # Generate response (non-streaming for tool loop, streaming for final)
@@ -194,6 +301,119 @@ class GeminiClient:
                 "type": "error",
                 "content": str(e),
             }
+
+    async def generate_with_tools(
+        self,
+        context: Dict,
+        tool_executor: Callable,
+    ) -> Dict:
+        """Non-streaming generation with tool loop support.
+
+        Used by the Listener agent for background fact extraction.
+
+        Args:
+            context: Contains system_prompt and user_message
+            tool_executor: Async function to execute tools: async (name, args) -> result
+
+        Returns:
+            Dict with 'text_response', 'tool_calls', and 'usage'
+        """
+        try:
+            system_prompt = context.get("system_prompt", "")
+            user_message = context.get("user_message", "")
+
+            model = genai.GenerativeModel(
+                model_name=self.settings.gemini_model,
+                tools=self.tools,
+                system_instruction=system_prompt if system_prompt else None,
+            )
+
+            chat = model.start_chat(history=[])
+
+            total_input_tokens = 0
+            total_output_tokens = 0
+            tool_calls_made = []
+            max_iterations = 10
+
+            parts = [user_message]
+
+            for iteration in range(max_iterations):
+                response = await asyncio.to_thread(
+                    lambda p=parts: chat.send_message(p)
+                )
+
+                # Track usage
+                if hasattr(response, 'usage_metadata'):
+                    um = response.usage_metadata
+                    total_input_tokens += getattr(um, 'prompt_token_count', 0)
+                    total_output_tokens += getattr(um, 'candidates_token_count', 0)
+
+                # Check for function calls
+                function_calls = []
+                text_parts = []
+
+                if response.candidates and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if hasattr(part, 'function_call') and part.function_call:
+                            function_calls.append(part.function_call)
+                        elif hasattr(part, 'text') and part.text:
+                            text_parts.append(part.text)
+
+                if function_calls:
+                    function_responses = []
+                    for fc in function_calls:
+                        result = await tool_executor(fc.name, dict(fc.args))
+                        tool_calls_made.append({
+                            "name": fc.name,
+                            "args": dict(fc.args),
+                            "result": result,
+                        })
+                        function_responses.append(
+                            genai.protos.Part(
+                                function_response=genai.protos.FunctionResponse(
+                                    name=fc.name,
+                                    response={"result": result}
+                                )
+                            )
+                        )
+                    parts = function_responses
+                    continue
+
+                # No more function calls, return result
+                cost = (
+                    (total_input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
+                    (total_output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+                )
+
+                return {
+                    "text_response": "".join(text_parts),
+                    "tool_calls": tool_calls_made,
+                    "usage": {
+                        "input_tokens": total_input_tokens,
+                        "output_tokens": total_output_tokens,
+                        "cost_usd": round(cost, 6),
+                    },
+                }
+
+            # Max iterations reached
+            cost = (
+                (total_input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
+                (total_output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+            )
+            return {
+                "text_response": "",
+                "tool_calls": tool_calls_made,
+                "usage": {
+                    "input_tokens": total_input_tokens,
+                    "output_tokens": total_output_tokens,
+                    "cost_usd": round(cost, 6),
+                },
+                "error": "max_tool_iterations_reached",
+            }
+
+        except Exception as e:
+            logger.error(f"Listener generation error: {e}")
+            raise
 
     async def generate_json(self, prompt: str) -> Dict:
         """Generate a JSON response from Gemini without streaming.

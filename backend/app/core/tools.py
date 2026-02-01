@@ -4,32 +4,31 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Tool definitions for Gemini
-UPDATE_STUDENT_RECORD_TOOL = {
-    "name": "update_student_record",
-    "description": "Update the student's long-term record with important information about them. Use this to remember things that help you be a better tutor: their goals, interests, background, learning preferences, personal details they share, or anything else worth remembering about them as a person.",
+MANAGE_STUDENT_FACTS_TOOL = {
+    "name": "manage_student_facts",
+    "description": "Manage long-term facts about the student. Use this to remember important information that helps you be a better tutor: their goals, interests, background, learning preferences, personal details, or progress observations. Facts are stored permanently across sessions.",
     "parameters": {
         "type": "object",
         "properties": {
-            "section": {
-                "type": "string",
-                "enum": ["goals", "background", "interests", "preferences", "notes"],
-                "description": "Which section to update: goals (language learning goals), background (their background/context), interests (hobbies, topics they enjoy), preferences (learning style preferences), notes (other important info)"
-            },
             "action": {
                 "type": "string",
-                "enum": ["append", "replace"],
-                "description": "Whether to append to or replace the section content"
+                "enum": ["add", "edit", "delete"],
+                "description": "add: Store a new fact. edit: Update an existing fact by ID. delete: Remove a fact by ID."
             },
             "content": {
                 "type": "string",
-                "description": "Markdown content to add or replace"
+                "description": "For 'add': the new fact to store. For 'edit': the updated text. For 'delete': not required."
+            },
+            "fact_id": {
+                "type": "integer",
+                "description": "Required for 'edit' and 'delete'. The ID of the fact to modify (shown in brackets in the facts list)."
             }
         },
-        "required": ["section", "action", "content"]
+        "required": ["action"]
     }
 }
 
-ALL_TOOLS = [UPDATE_STUDENT_RECORD_TOOL]
+ALL_TOOLS = [MANAGE_STUDENT_FACTS_TOOL]
 
 
 async def execute_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
@@ -37,8 +36,8 @@ async def execute_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
     logger.info(f"Executing tool: {tool_name} with args: {args}")
 
     try:
-        if tool_name == "update_student_record":
-            return await execute_update_student_record(args)
+        if tool_name == "manage_student_facts":
+            return await execute_manage_student_facts(args)
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -46,23 +45,65 @@ async def execute_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
         return f"Error executing {tool_name}: {str(e)}"
 
 
-async def execute_update_student_record(args: Dict[str, Any]) -> str:
-    """Update a section of the student record."""
-    from app.services.notes_service import NotesService
-    from app.config import get_settings
+async def execute_manage_student_facts(args: Dict[str, Any]) -> str:
+    """Manage student facts in the database."""
+    from app.db.database import async_session_maker
+    from app.db.models import StudentFact
+    from sqlalchemy import select
 
-    settings = get_settings()
-    notes_service = NotesService()
+    action = args.get("action")
+    content = args.get("content", "").strip()
+    fact_id = args.get("fact_id")
 
-    section = args["section"]
-    action = args["action"]
-    content = args["content"]
+    if not action:
+        return "Error: 'action' is required"
 
-    await notes_service.update_student_record_section(
-        settings.student_record_path,
-        section,
-        content,
-        action
-    )
+    async with async_session_maker() as session:
+        if action == "add":
+            if not content:
+                return "Error: 'content' is required for add action"
 
-    return f"Updated student record: {section}"
+            # Check for duplicate (exact match)
+            stmt = select(StudentFact).where(StudentFact.content == content)
+            existing = (await session.execute(stmt)).scalar_one_or_none()
+            if existing:
+                return "Fact already exists (duplicate not added)"
+
+            fact = StudentFact(content=content, source="listener")
+            session.add(fact)
+            await session.commit()
+            await session.refresh(fact)
+            return f"Added fact [#{fact.id}]: {content[:60]}{'...' if len(content) > 60 else ''}"
+
+        elif action == "edit":
+            if fact_id is None:
+                return "Error: 'fact_id' is required for edit action"
+            if not content:
+                return "Error: 'content' is required for edit action (the new text)"
+
+            stmt = select(StudentFact).where(StudentFact.id == fact_id)
+            fact = (await session.execute(stmt)).scalar_one_or_none()
+            if not fact:
+                return f"Error: No fact found with ID {fact_id}"
+
+            old_content = fact.content
+            fact.content = content
+            await session.commit()
+            return f"Updated fact [#{fact_id}]: '{old_content[:30]}...' → '{content[:30]}...'"
+
+        elif action == "delete":
+            if fact_id is None:
+                return "Error: 'fact_id' is required for delete action"
+
+            stmt = select(StudentFact).where(StudentFact.id == fact_id)
+            fact = (await session.execute(stmt)).scalar_one_or_none()
+            if not fact:
+                return f"Error: No fact found with ID {fact_id}"
+
+            deleted_content = fact.content
+            await session.delete(fact)
+            await session.commit()
+            return f"Deleted fact [#{fact_id}]: {deleted_content[:60]}{'...' if len(deleted_content) > 60 else ''}"
+
+        else:
+            return f"Unknown action: {action}"
