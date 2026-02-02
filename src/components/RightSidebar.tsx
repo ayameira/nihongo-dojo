@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { literaryQuotes } from '../data/literaryQuotes';
+import { Speaker } from '../hooks/useTTS';
 
 interface RightSidebarProps {
   totalSpent: number;
@@ -7,6 +8,10 @@ interface RightSidebarProps {
   isCollapsed: boolean;
   onToggle: () => void;
   onBudgetClick: () => void;
+  speakers: Speaker[];
+  selectedSpeakerId: number;
+  onSpeakerChange: (id: number) => void;
+  ttsError: string | null;
 }
 
 const encouragements = [
@@ -91,6 +96,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   isCollapsed,
   onToggle,
   onBudgetClick,
+  speakers,
+  selectedSpeakerId,
+  onSpeakerChange,
+  ttsError,
 }) => {
   const [currentQuote, setCurrentQuote] = useState(() =>
     Math.floor(Math.random() * literaryQuotes.length)
@@ -171,6 +180,34 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           <span className="budget-percent">{spentPercentage.toFixed(1)}%</span>
           <span className="budget-remaining">${remaining.toFixed(2)} left</span>
         </div>
+      </div>
+
+      {/* Voice Selector Section */}
+      <div className="voice-section">
+        <div className="voice-header">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+          <span className="voice-label">Voice</span>
+        </div>
+        {ttsError ? (
+          <div className="voice-error">{ttsError}</div>
+        ) : speakers.length > 0 ? (
+          <select
+            value={selectedSpeakerId}
+            onChange={(e) => onSpeakerChange(parseInt(e.target.value, 10))}
+            className="voice-select"
+          >
+            {speakers.map((speaker) => (
+              <option key={speaker.id} value={speaker.id}>
+                {speaker.display_name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="voice-loading">Loading voices...</div>
+        )}
       </div>
 
       {/* Quote Section */}

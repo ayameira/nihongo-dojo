@@ -12,7 +12,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from httpx import AsyncClient, ASGITransport
 
-from app.db.models import Base, VocabEntry, ChatMessage, ChatSession, TokenLog
+from app.db.models import Base, VocabEntry, ChatMessage, ChatSession, TokenLog, StudentFact
 from app.config import Settings
 
 
@@ -32,7 +32,6 @@ def test_settings() -> Settings:
         database_url="sqlite+aiosqlite:///:memory:",
         gemini_api_key="test-api-key",
         gemini_model="gemini-2.0-flash",
-        student_record_path="./test_student_record.md",
         anki_collection_path="",
         cost_limit_weekly=10.0,
         gemini_input_cost_per_1m=0.075,
@@ -179,36 +178,6 @@ async def sample_token_logs(async_session: AsyncSession, sample_session: ChatSes
 
     await async_session.commit()
     return logs
-
-
-@pytest.fixture
-def temp_student_record_file() -> Generator[str, None, None]:
-    """Create a temporary student record file for testing."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-        f.write("""# Student Record
-
-## Goals
-Become conversational in Japanese
-
-## Background
-Software engineer learning for travel
-
-## Interests
-Anime, manga, Japanese food
-
-## Preferences
-Prefers immersive learning
-
-## Notes
-Good at verb conjugations
-""")
-        temp_path = f.name
-
-    yield temp_path
-
-    # Cleanup
-    if os.path.exists(temp_path):
-        os.remove(temp_path)
 
 
 @pytest.fixture

@@ -2,11 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useChat, Message, AgentAction } from '../hooks/useChat';
+import { AudioPlayer } from './AudioPlayer';
+import { Fact } from '../hooks/useFacts';
 
 interface ChatProps {
-  blackboardContent?: string;
-  onRefreshNotes?: () => void;
+  facts?: Fact[];
+  factsLoading?: boolean;
+  onAddFact?: (content: string) => Promise<Fact | null>;
+  onUpdateFact?: (id: number, content: string) => Promise<boolean>;
+  onDeleteFact?: (id: number) => Promise<boolean>;
+  onRefreshFacts?: () => Promise<void>;
   sessionId: string | null;
+  selectedSpeakerId?: number;
 }
 
 const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => {
@@ -33,7 +40,7 @@ const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => 
   );
 };
 
-export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, sessionId }) => {
+export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUpdateFact, onDeleteFact, onRefreshFacts, sessionId, selectedSpeakerId }) => {
   const {
     messages,
     isLoading,
@@ -51,9 +58,18 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
   const [activeTab, setActiveTab] = useState<'chat' | 'blackboard'>('chat');
   const [isAtBottom, setIsAtBottom] = useState(true);
 
+  // Facts editing state
+  const [editingFactId, setEditingFactId] = useState<number | null>(null);
+  const [editFactValue, setEditFactValue] = useState('');
+  const [deleteConfirmFactId, setDeleteConfirmFactId] = useState<number | null>(null);
+  const [newFactValue, setNewFactValue] = useState('');
+  const [isAddingFact, setIsAddingFact] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wasLoadingRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -71,6 +87,22 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
       scrollToBottom();
     }
   }, [messages, loadingState, currentAction, activeTab, isAtBottom]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [inputValue]);
+
+  // Refresh facts when chat response completes (AI may have updated them)
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading && onRefreshFacts) {
+      onRefreshFacts();
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading, onRefreshFacts]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +136,57 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
           e.preventDefault();
         }
       }
+    }
+  };
+
+  // Facts editing handlers
+  const handleStartFactEdit = (fact: Fact) => {
+    setEditingFactId(fact.id);
+    setEditFactValue(fact.content);
+  };
+
+  const handleSaveFactEdit = async () => {
+    if (editingFactId && editFactValue.trim() && onUpdateFact) {
+      await onUpdateFact(editingFactId, editFactValue.trim());
+    }
+    setEditingFactId(null);
+    setEditFactValue('');
+  };
+
+  const handleFactKeyDown = (e: React.KeyboardEvent) => {
+    // Ignore Enter during IME composition (Japanese/Chinese/Korean input)
+    const isComposing = e.nativeEvent.isComposing || e.keyCode === 229;
+    if (e.key === 'Enter' && !isComposing) {
+      handleSaveFactEdit();
+    } else if (e.key === 'Escape') {
+      setEditingFactId(null);
+      setEditFactValue('');
+    }
+  };
+
+  const handleAddFact = async () => {
+    if (newFactValue.trim() && onAddFact) {
+      await onAddFact(newFactValue.trim());
+      setNewFactValue('');
+      setIsAddingFact(false);
+    }
+  };
+
+  const handleNewFactKeyDown = (e: React.KeyboardEvent) => {
+    // Ignore Enter during IME composition (Japanese/Chinese/Korean input)
+    const isComposing = e.nativeEvent.isComposing || e.keyCode === 229;
+    if (e.key === 'Enter' && !isComposing) {
+      handleAddFact();
+    } else if (e.key === 'Escape') {
+      setIsAddingFact(false);
+      setNewFactValue('');
+    }
+  };
+
+  const handleConfirmFactDelete = async () => {
+    if (deleteConfirmFactId && onDeleteFact) {
+      await onDeleteFact(deleteConfirmFactId);
+      setDeleteConfirmFactId(null);
     }
   };
 
@@ -157,59 +240,77 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
     }
   };
 
-  const renderAssistantMessage = (msg: Message) => (
-    <div key={msg.id} className="message-assistant group">
-      <div className="assistant-content">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            p: ({ children }) => <p className="prose-p">{children}</p>,
-            ul: ({ children }) => <ul className="prose-ul">{children}</ul>,
-            ol: ({ children }) => <ol className="prose-ol">{children}</ol>,
-            li: ({ children }) => <li className="prose-li">{children}</li>,
-            strong: ({ children }) => <strong className="prose-strong">{children}</strong>,
-            em: ({ children }) => <em className="prose-em">{children}</em>,
-            code: ({ children, className }) => {
-              const isInline = !className;
-              return isInline ? (
-                <code className="prose-code-inline">{children}</code>
-              ) : (
-                <code className={`prose-code-block ${className || ''}`}>
-                  {children}
-                </code>
-              );
-            },
-            blockquote: ({ children }) => (
-              <blockquote className="prose-blockquote">{children}</blockquote>
-            ),
-          }}
-        >
-          {msg.content || (msg.status === 'streaming' ? '' : '')}
-        </ReactMarkdown>
-        {msg.status === 'streaming' && !msg.content && (
-          <span className="streaming-cursor" />
+  const renderAssistantMessage = (msg: Message) => {
+    // Split content by paragraphs for per-chunk audio playback
+    const chunks = msg.content
+      ? msg.content.split(/\n\n+/).filter(chunk => chunk.trim())
+      : [];
+
+    const markdownComponents = {
+      p: ({ children }: { children?: React.ReactNode }) => <p className="prose-p">{children}</p>,
+      ul: ({ children }: { children?: React.ReactNode }) => <ul className="prose-ul">{children}</ul>,
+      ol: ({ children }: { children?: React.ReactNode }) => <ol className="prose-ol">{children}</ol>,
+      li: ({ children }: { children?: React.ReactNode }) => <li className="prose-li">{children}</li>,
+      strong: ({ children }: { children?: React.ReactNode }) => <strong className="prose-strong">{children}</strong>,
+      em: ({ children }: { children?: React.ReactNode }) => <em className="prose-em">{children}</em>,
+      code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
+        const isInline = !className;
+        return isInline ? (
+          <code className="prose-code-inline">{children}</code>
+        ) : (
+          <code className={`prose-code-block ${className || ''}`}>
+            {children}
+          </code>
+        );
+      },
+      blockquote: ({ children }: { children?: React.ReactNode }) => (
+        <blockquote className="prose-blockquote">{children}</blockquote>
+      ),
+    };
+
+    return (
+      <div key={msg.id} className="message-assistant group">
+        <div className="assistant-content">
+          {chunks.length > 0 ? (
+            chunks.map((chunk, index) => (
+              <div key={index} className="message-chunk">
+                <div className="chunk-content">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {chunk}
+                  </ReactMarkdown>
+                </div>
+                {msg.status === 'complete' && (
+                  <AudioPlayer text={chunk} speakerId={selectedSpeakerId} />
+                )}
+              </div>
+            ))
+          ) : (
+            msg.status === 'streaming' && !msg.content && (
+              <span className="streaming-cursor" />
+            )
+          )}
+        </div>
+
+        {/* Feedback buttons - whole message scope */}
+        {msg.status === 'complete' && (
+          <div className="feedback-buttons">
+            <button
+              onClick={() => sendDifficultyFeedback('too_hard')}
+              className={`feedback-btn ${pendingFeedback === 'too_hard' ? 'active-hard' : ''}`}
+            >
+              Too Hard
+            </button>
+            <button
+              onClick={() => sendDifficultyFeedback('too_easy')}
+              className={`feedback-btn ${pendingFeedback === 'too_easy' ? 'active-easy' : ''}`}
+            >
+              Too Easy
+            </button>
+          </div>
         )}
       </div>
-
-      {/* Feedback buttons - appear on hover for completed messages */}
-      {msg.status === 'complete' && (
-        <div className="feedback-buttons">
-          <button
-            onClick={() => sendDifficultyFeedback('too_hard')}
-            className={`feedback-btn ${pendingFeedback === 'too_hard' ? 'active-hard' : ''}`}
-          >
-            Too Hard
-          </button>
-          <button
-            onClick={() => sendDifficultyFeedback('too_easy')}
-            className={`feedback-btn ${pendingFeedback === 'too_easy' ? 'active-easy' : ''}`}
-          >
-            Too Easy
-          </button>
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
 
   const renderMessage = (msg: Message) => {
     return msg.role === 'user' ? renderUserMessage(msg) : renderAssistantMessage(msg);
@@ -317,49 +418,91 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 Student Profile
               </h2>
-              {onRefreshNotes && (
-                <button onClick={onRefreshNotes} className="refresh-btn" title="Refresh">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-                </button>
-              )}
+              <button onClick={() => setIsAddingFact(true)} className="add-fact-btn" title="Add fact">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
             </div>
-            {blackboardContent ? (
-              <div className="notes-content">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    h1: ({ children }) => <h1 className="notes-h1">{children}</h1>,
-                    h2: ({ children }) => <h2 className="notes-h2">{children}</h2>,
-                    h3: ({ children }) => <h3 className="notes-h3">{children}</h3>,
-                    p: ({ children }) => <p className="notes-p">{children}</p>,
-                    ul: ({ children }) => <ul className="notes-ul">{children}</ul>,
-                    ol: ({ children }) => <ol className="notes-ol">{children}</ol>,
-                    li: ({ children }) => <li className="notes-li">{children}</li>,
-                    strong: ({ children }) => <strong className="notes-strong">{children}</strong>,
-                    em: ({ children }) => <em className="notes-em">{children}</em>,
-                    code: ({ children, className }) => {
-                      const isInline = !className;
-                      return isInline ? (
-                        <code className="notes-code-inline">{children}</code>
-                      ) : (
-                        <code className={`notes-code-block ${className || ''}`}>{children}</code>
-                      );
-                    },
-                    blockquote: ({ children }) => (
-                      <blockquote className="notes-blockquote">{children}</blockquote>
-                    ),
-                  }}
-                >
-                  {blackboardContent
-                    .replace(/<!--[\s\S]*?-->/g, '')
-                    .replace(/^#\s+[^\n]+\n*/m, '')
-                    .trim()}
-                </ReactMarkdown>
+
+            {/* Add new fact form */}
+            {isAddingFact && (
+              <div className="fact-add-form">
+                <input
+                  type="text"
+                  value={newFactValue}
+                  onChange={(e) => setNewFactValue(e.target.value)}
+                  onKeyDown={handleNewFactKeyDown}
+                  placeholder="Add a new fact about yourself..."
+                  className="fact-edit-input"
+                  autoFocus
+                />
+                <div className="fact-add-actions">
+                  <button onClick={handleAddFact}>Save</button>
+                  <button onClick={() => { setIsAddingFact(false); setNewFactValue(''); }}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {/* Facts list */}
+            {factsLoading ? (
+              <div className="notes-empty">
+                <p>Loading...</p>
+              </div>
+            ) : facts && facts.length > 0 ? (
+              <div className="facts-list">
+                {facts.map((fact) => (
+                  <div key={fact.id} className="fact-item">
+                    {editingFactId === fact.id ? (
+                      <input
+                        type="text"
+                        className="fact-edit-input"
+                        value={editFactValue}
+                        onChange={(e) => setEditFactValue(e.target.value)}
+                        onBlur={handleSaveFactEdit}
+                        onKeyDown={handleFactKeyDown}
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        <span className="fact-content">{fact.content}</span>
+                        <div className="fact-actions">
+                          <button
+                            className="fact-action-btn"
+                            onClick={() => handleStartFactEdit(fact)}
+                            title="Edit"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </button>
+                          <button
+                            className="fact-action-btn delete"
+                            onClick={() => setDeleteConfirmFactId(fact.id)}
+                            title="Delete"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="notes-empty">
                 <p>No profile yet</p>
-                <p className="notes-hint">Your tutor will learn about you as you chat</p>
+                <p className="notes-hint">Add facts about yourself or let your tutor learn about you</p>
+              </div>
+            )}
+
+            {/* Delete confirmation modal */}
+            {deleteConfirmFactId && (
+              <div className="fact-delete-modal-overlay">
+                <div className="fact-delete-modal">
+                  <h3>Delete this fact?</h3>
+                  <p>This cannot be undone.</p>
+                  <div className="fact-delete-actions">
+                    <button onClick={() => setDeleteConfirmFactId(null)}>Cancel</button>
+                    <button className="delete" onClick={handleConfirmFactDelete}>Delete</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -396,14 +539,25 @@ export const Chat: React.FC<ChatProps> = ({ blackboardContent, onRefreshNotes, s
             </button>
 
             <div className="input-wrapper">
-              <input
-                type="text"
+              <textarea
+                ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onPaste={handlePaste}
+                onKeyDown={(e) => {
+                  // Ignore Enter during IME composition (Japanese/Chinese/Korean input)
+                  const isComposing = e.nativeEvent.isComposing || e.keyCode === 229;
+                  if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+                    e.preventDefault();
+                    if ((inputValue.trim() || selectedImage) && !isLoading) {
+                      handleSendMessage(e);
+                    }
+                  }
+                }}
                 placeholder="Write something..."
                 className="message-input"
                 disabled={isLoading}
+                rows={1}
               />
 
               <button

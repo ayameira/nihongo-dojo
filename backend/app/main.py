@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -5,7 +7,7 @@ import logging
 
 from app.config import get_settings
 from app.db.database import init_db, close_db, get_session
-from app.api import chat, vocab, notes, telemetry, config, sessions
+from app.api import chat, vocab, notes, telemetry, config, sessions, media
 from app.services.anki_sync import export_anki_to_db
 from app.services.anki_importer import import_from_export_db
 
@@ -32,6 +34,11 @@ async def lifespan(app: FastAPI):
     # Initialize database
     await init_db()
     logger.info("Database initialized")
+
+    # Ensure TTS audio cache directory exists
+    cache_dir = Path(settings.tts_cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"TTS cache directory ready: {cache_dir}")
 
     # Sync Anki data on startup
     try:
@@ -80,6 +87,7 @@ app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"])
 app.include_router(config.router, prefix="/api/config", tags=["config"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
+app.include_router(media.router, prefix="/api/media", tags=["media"])
 
 
 @app.get("/api/health")

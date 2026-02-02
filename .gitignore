@@ -37,3 +37,10 @@ venv/
 *.log
 npm-debug.log*
 logs/
+
+# TTS Audio Cache
+audio_cache/
+
+# Xcode user data
+*.xcuserstate
+xcuserdata/

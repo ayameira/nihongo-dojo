@@ -1,156 +1,142 @@
 """
-API tests for notes routes (now serves student record).
+Tests for the notes API endpoints (student facts).
 """
 import pytest
-from unittest.mock import patch
+from httpx import AsyncClient
 
 
 class TestGetNotes:
     """Tests for GET /api/notes endpoint."""
 
     @pytest.mark.asyncio
-    async def test_returns_student_record_content(self, test_client, temp_student_record_file, test_settings):
-        """Test retrieving student record content."""
-        test_settings.student_record_path = temp_student_record_file
-
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.get("/api/notes")
-
+    async def test_returns_empty_placeholder(self, test_client: AsyncClient):
+        """Test returns placeholder when no facts exist."""
+        response = await test_client.get("/api/notes")
         assert response.status_code == 200
         data = response.json()
         assert "content" in data
-        assert "Student Record" in data["content"]
+        assert "No information recorded yet" in data["content"]
 
 
-class TestGetSection:
-    """Tests for GET /api/notes/{section} endpoint."""
+class TestListFacts:
+    """Tests for GET /api/notes/facts endpoint."""
 
     @pytest.mark.asyncio
-    async def test_returns_section_content(self, test_client, temp_student_record_file, test_settings):
-        """Test retrieving a specific section."""
-        test_settings.student_record_path = temp_student_record_file
-
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.get("/api/notes/goals")
-
+    async def test_returns_empty_list(self, test_client: AsyncClient):
+        """Test returns empty list when no facts exist."""
+        response = await test_client.get("/api/notes/facts")
         assert response.status_code == 200
         data = response.json()
-        assert data["section"] == "goals"
-        assert "content" in data
+        assert data["facts"] == []
+
+
+class TestAddFact:
+    """Tests for POST /api/notes/facts endpoint."""
 
     @pytest.mark.asyncio
-    async def test_returns_400_for_invalid_section(self, test_client):
-        """Test that 400 is returned for invalid section name."""
-        response = await test_client.get("/api/notes/invalid_section")
-
-        assert response.status_code == 400
-        assert "Invalid section" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_accepts_all_valid_sections(self, test_client, temp_student_record_file, test_settings):
-        """Test that all valid sections are accepted."""
-        test_settings.student_record_path = temp_student_record_file
-
-        valid_sections = ["goals", "background", "interests", "preferences", "notes"]
-
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            for section in valid_sections:
-                response = await test_client.get(f"/api/notes/{section}")
-                assert response.status_code == 200, f"Failed for section: {section}"
-
-
-class TestUpdateNotes:
-    """Tests for PUT /api/notes endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_updates_full_student_record(self, test_client, temp_student_record_file, test_settings):
-        """Test updating the entire student record file."""
-        test_settings.student_record_path = temp_student_record_file
-        new_content = "# Student Record\n\n## Goals\nNew goals here"
-
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.put(
-                "/api/notes",
-                json={"content": new_content}
-            )
-
-        assert response.status_code == 200
-        assert "updated" in response.json()["message"].lower()
-
-
-class TestUpdateSection:
-    """Tests for PUT /api/notes/{section} endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_replaces_section(self, test_client, temp_student_record_file, test_settings):
-        """Test replacing a section's content."""
-        test_settings.student_record_path = temp_student_record_file
-
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.put(
-                "/api/notes/goals",
-                json={
-                    "action": "replace",
-                    "content": "New goals content"
-                }
-            )
-
-        assert response.status_code == 200
-        assert "updated" in response.json()["message"].lower()
-
-    @pytest.mark.asyncio
-    async def test_appends_to_section(self, test_client, temp_student_record_file, test_settings):
-        """Test appending to a section's content."""
-        test_settings.student_record_path = temp_student_record_file
-
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.put(
-                "/api/notes/notes",
-                json={
-                    "action": "append",
-                    "content": "Additional note"
-                }
-            )
-
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_returns_400_for_invalid_section(self, test_client):
-        """Test that 400 is returned for invalid section."""
-        response = await test_client.put(
-            "/api/notes/invalid",
-            json={"action": "replace", "content": "test"}
+    async def test_adds_fact(self, test_client: AsyncClient):
+        """Test adding a new fact."""
+        response = await test_client.post(
+            "/api/notes/facts",
+            json={"content": "Likes anime"}
         )
-
-        assert response.status_code == 400
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == "Likes anime"
+        assert data["source"] == "manual"
+        assert "id" in data
 
     @pytest.mark.asyncio
-    async def test_returns_400_for_invalid_action(self, test_client, temp_student_record_file, test_settings):
-        """Test that 400 is returned for invalid action."""
-        test_settings.student_record_path = temp_student_record_file
-
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.put(
-                "/api/notes/goals",
-                json={"action": "invalid_action", "content": "test"}
-            )
-
+    async def test_prevents_duplicate(self, test_client: AsyncClient):
+        """Test that duplicate facts are prevented."""
+        # Add first fact
+        await test_client.post(
+            "/api/notes/facts",
+            json={"content": "Duplicate fact"}
+        )
+        # Try to add duplicate
+        response = await test_client.post(
+            "/api/notes/facts",
+            json={"content": "Duplicate fact"}
+        )
         assert response.status_code == 400
-        assert "Action must be" in response.json()["detail"]
+        assert "already exists" in response.json()["detail"]
+
+
+class TestDeleteFact:
+    """Tests for DELETE /api/notes/facts/{id} endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_deletes_fact(self, test_client: AsyncClient):
+        """Test deleting a fact."""
+        # Add a fact first
+        add_response = await test_client.post(
+            "/api/notes/facts",
+            json={"content": "Fact to delete"}
+        )
+        fact_id = add_response.json()["id"]
+
+        # Delete it
+        response = await test_client.delete(f"/api/notes/facts/{fact_id}")
+        assert response.status_code == 200
+
+        # Verify it's gone
+        list_response = await test_client.get("/api/notes/facts")
+        facts = list_response.json()["facts"]
+        assert not any(f["id"] == fact_id for f in facts)
+
+    @pytest.mark.asyncio
+    async def test_returns_404_for_nonexistent(self, test_client: AsyncClient):
+        """Test 404 for nonexistent fact."""
+        response = await test_client.delete("/api/notes/facts/99999")
+        assert response.status_code == 404
+
+
+class TestUpdateFact:
+    """Tests for PUT /api/notes/facts/{id} endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_updates_fact(self, test_client: AsyncClient):
+        """Test updating a fact."""
+        # Add a fact first
+        add_response = await test_client.post(
+            "/api/notes/facts",
+            json={"content": "Original content"}
+        )
+        fact_id = add_response.json()["id"]
+
+        # Update it
+        response = await test_client.put(
+            f"/api/notes/facts/{fact_id}",
+            json={"content": "Updated content"}
+        )
+        assert response.status_code == 200
+        assert response.json()["content"] == "Updated content"
+
+    @pytest.mark.asyncio
+    async def test_returns_404_for_nonexistent(self, test_client: AsyncClient):
+        """Test 404 for nonexistent fact."""
+        response = await test_client.put(
+            "/api/notes/facts/99999",
+            json={"content": "New content"}
+        )
+        assert response.status_code == 404
 
 
 class TestGetTokenCount:
     """Tests for GET /api/notes/token-count endpoint."""
 
     @pytest.mark.asyncio
-    async def test_returns_token_count(self, test_client, temp_student_record_file, test_settings):
-        """Test retrieving token count."""
-        test_settings.student_record_path = temp_student_record_file
+    async def test_returns_token_count(self, test_client: AsyncClient):
+        """Test returns token count."""
+        # Add some facts
+        await test_client.post(
+            "/api/notes/facts",
+            json={"content": "This is a test fact with some content"}
+        )
 
-        with patch('app.api.notes.get_settings', return_value=test_settings):
-            response = await test_client.get("/api/notes/token-count")
-
+        response = await test_client.get("/api/notes/token-count")
         assert response.status_code == 200
         data = response.json()
         assert "token_count" in data
-        assert isinstance(data["token_count"], int)
+        assert data["token_count"] > 0

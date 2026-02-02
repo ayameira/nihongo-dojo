@@ -87,6 +87,38 @@ class RequestLogger:
             logger.error(f"Failed to log interaction: {e}")
             return ""
 
+    async def log_llm_payload(
+        self,
+        session_id: str,
+        payload: Dict,
+    ) -> str:
+        """Log exact LLM request payload for replay.
+
+        The payload should contain everything needed to replay the request:
+        - model: The model name
+        - contents: The full conversation history + current message
+        - tools: Tool definitions
+        - iteration: For multi-turn tool loops
+        - timestamp: When the request was made
+        """
+        timestamp = datetime.now()
+        date_dir = timestamp.strftime("%Y-%m-%d")
+        full_dir = os.path.join(self.logs_dir, date_dir, session_id)
+        os.makedirs(full_dir, exist_ok=True)
+
+        iteration = payload.get("iteration", 0)
+        filename = timestamp.strftime("%H-%M-%S-%f") + f"_iter{iteration}_request.json"
+        log_path = os.path.join(full_dir, filename)
+
+        try:
+            async with aiofiles.open(log_path, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(payload, indent=2, ensure_ascii=False))
+            logger.info(f"Logged LLM payload to {log_path}")
+            return log_path
+        except Exception as e:
+            logger.error(f"Failed to log LLM payload: {e}")
+            return ""
+
     async def log_error(
         self,
         session_id: str,

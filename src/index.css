@@ -358,6 +358,35 @@ body {
   color: var(--ink);
 }
 
+/* Message chunk with inline audio */
+.message-chunk {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+.message-chunk .chunk-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Audio button appears on chunk hover */
+.message-chunk .audio-player-btn {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.message-chunk:hover .audio-player-btn {
+  opacity: 1;
+}
+
+/* Spacing between chunks */
+.message-chunk + .message-chunk {
+  margin-top: var(--space-sm);
+}
+
 /* Prose styling for markdown */
 .prose-p {
   margin-bottom: var(--space-md);
@@ -442,6 +471,7 @@ body {
 /* Feedback buttons */
 .feedback-buttons {
   display: flex;
+  align-items: center;
   gap: var(--space-sm);
   margin-top: var(--space-sm);
   opacity: 0;
@@ -749,6 +779,217 @@ body {
   border-radius: 0 6px 6px 0;
 }
 
+/* ===== Facts List ===== */
+.facts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  transition: background 0.15s ease;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+}
+
+.fact-item:hover {
+  background: var(--paper-warm);
+  border-left-color: var(--vermillion);
+}
+
+.fact-content {
+  font-size: 0.9rem;
+  color: var(--ink);
+  flex: 1;
+  line-height: 1.5;
+}
+
+.fact-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.fact-item:hover .fact-actions {
+  opacity: 1;
+}
+
+.fact-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.fact-action-btn:hover {
+  background: var(--paper-dark);
+  color: var(--ink);
+}
+
+.fact-action-btn.delete:hover {
+  background: rgba(199, 62, 29, 0.1);
+  color: var(--vermillion);
+}
+
+.fact-edit-input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.9rem;
+  border: 1px solid var(--vermillion);
+  border-radius: 6px;
+  outline: none;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+.fact-edit-input:focus {
+  box-shadow: 0 0 0 2px rgba(199, 62, 29, 0.15);
+}
+
+.fact-add-form {
+  margin-bottom: var(--space-md);
+  padding: var(--space-md);
+  background: var(--paper-warm);
+  border-radius: 6px;
+  border: 1px dashed var(--paper-dark);
+}
+
+.fact-add-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  justify-content: flex-end;
+}
+
+.fact-add-actions button {
+  padding: var(--space-xs) var(--space-md);
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fact-add-actions button:first-child {
+  background: var(--vermillion);
+  color: var(--paper);
+  border: none;
+}
+
+.fact-add-actions button:first-child:hover {
+  background: var(--vermillion-soft);
+}
+
+.fact-add-actions button:last-child {
+  background: none;
+  border: 1px solid var(--paper-dark);
+  color: var(--ink-muted);
+}
+
+.fact-add-actions button:last-child:hover {
+  border-color: var(--ink-muted);
+  color: var(--ink);
+}
+
+.add-fact-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: 1px dashed var(--paper-dark);
+  border-radius: 4px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.add-fact-btn:hover {
+  border-color: var(--vermillion);
+  color: var(--vermillion);
+  background: rgba(199, 62, 29, 0.05);
+}
+
+.fact-delete-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.fact-delete-modal {
+  background: var(--paper);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  max-width: 320px;
+  width: calc(100% - 32px);
+  padding: var(--space-lg);
+}
+
+.fact-delete-modal h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: var(--space-sm);
+}
+
+.fact-delete-modal p {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+  margin-bottom: var(--space-lg);
+}
+
+.fact-delete-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+.fact-delete-actions button {
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: none;
+  border: 1px solid var(--paper-dark);
+  color: var(--ink-muted);
+}
+
+.fact-delete-actions button:hover {
+  border-color: var(--ink-muted);
+  color: var(--ink);
+}
+
+.fact-delete-actions button.delete {
+  background: var(--vermillion);
+  color: var(--paper);
+  border: none;
+}
+
+.fact-delete-actions button.delete:hover {
+  background: var(--vermillion-soft);
+}
+
 /* ===== Input Area ===== */
 .input-area {
   padding: var(--space-lg) var(--space-xl);
@@ -834,7 +1075,11 @@ body {
   font-family: var(--font-body);
   color: var(--ink);
   outline: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease;
+  resize: none;
+  overflow-y: auto;
+  max-height: 200px;
+  line-height: 1.5;
 }
 
 .message-input::placeholder {
@@ -1178,6 +1423,76 @@ body {
 
 .budget-percent {
   font-weight: 500;
+}
+
+/* Voice Selector Section */
+.voice-section {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--paper-dark);
+}
+
+.voice-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  color: var(--ink-muted);
+}
+
+.voice-header svg {
+  color: var(--vermillion);
+}
+
+.voice-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.voice-select {
+  width: 100%;
+  padding: var(--space-sm);
+  font-size: 0.8rem;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--paper-dark);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6b6b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-sm) center;
+  padding-right: var(--space-xl);
+}
+
+.voice-select:hover {
+  border-color: var(--ink-muted);
+}
+
+.voice-select:focus {
+  outline: none;
+  border-color: var(--vermillion);
+  box-shadow: 0 0 0 2px rgba(199, 62, 29, 0.1);
+}
+
+.voice-error {
+  font-size: 0.75rem;
+  color: var(--vermillion);
+  padding: var(--space-sm);
+  background: rgba(199, 62, 29, 0.08);
+  border-radius: 4px;
+  text-align: center;
+}
+
+.voice-loading {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  font-style: italic;
+  text-align: center;
+  padding: var(--space-sm);
 }
 
 /* Quote Section */
@@ -2076,4 +2391,61 @@ body {
 @keyframes power-stance {
   0%, 100% { transform: rotate(-2deg) scale(1); }
   50% { transform: rotate(-2deg) scale(1.02); }
+}
+
+/* ===== Audio Player Button ===== */
+.audio-player-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--paper-dark);
+  border-radius: 50%;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+  margin-left: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.audio-player-btn:hover:not(:disabled) {
+  background: var(--paper-warm);
+  border-color: var(--ink-muted);
+  color: var(--ink);
+}
+
+.audio-player-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.audio-player-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Playing state */
+.audio-player-btn svg {
+  transition: color 0.15s ease;
+}
+
+/* Error state */
+.audio-player-btn .audio-error {
+  color: var(--vermillion);
+}
+
+/* Loading spinner */
+.audio-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--paper-dark);
+  border-top-color: var(--vermillion);
+  border-radius: 50%;
+  animation: audio-spin 0.8s linear infinite;
+}
+
+@keyframes audio-spin {
+  to { transform: rotate(360deg); }
 }

@@ -86,8 +86,8 @@ class TestConvertTools:
             with patch('google.generativeai.GenerativeModel'):
                 client = GeminiClient(test_settings)
 
-                # We should have 3 tools
-                assert len(client.tools) == 3
+                # We should have 1 tool (manage_student_facts)
+                assert len(client.tools) == 1
 
     def test_tool_names_preserved(self, test_settings):
         """Test that tool names are preserved during conversion."""
@@ -96,9 +96,7 @@ class TestConvertTools:
                 client = GeminiClient(test_settings)
 
                 tool_names = [t.name for t in client.tools]
-                assert "save_vocab" in tool_names
-                assert "update_notes" in tool_names
-                assert "adjust_difficulty" in tool_names
+                assert "manage_student_facts" in tool_names
 
 
 class TestStreamChat:
@@ -150,8 +148,8 @@ class TestStreamChat:
             with patch('google.generativeai.GenerativeModel') as mock_model_class:
                 # Set up mock function call
                 mock_fc = MagicMock()
-                mock_fc.name = "save_vocab"
-                mock_fc.args = {"kana": "test", "meaning": "test"}
+                mock_fc.name = "manage_student_facts"
+                mock_fc.args = {"action": "add", "content": "test fact"}
 
                 mock_part = MagicMock()
                 mock_part.text = None
@@ -185,7 +183,7 @@ class TestStreamChat:
 
                 tool_calls = [c for c in chunks if c["type"] == "tool_call"]
                 assert len(tool_calls) > 0
-                assert tool_calls[0]["name"] == "save_vocab"
+                assert tool_calls[0]["name"] == "manage_student_facts"
 
     @pytest.mark.asyncio
     async def test_yields_error_on_exception(self, test_settings):

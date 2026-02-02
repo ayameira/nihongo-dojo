@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Chat } from './Chat';
+import { Fact } from '../hooks/useFacts';
 
 // Mock useChat hook
 const mockUseChat = vi.fn();
@@ -54,11 +55,11 @@ describe('Chat', () => {
   });
 
   describe('rendering', () => {
-    it('renders chat and notes tabs', () => {
+    it('renders chat and profile tabs', () => {
       render(<Chat sessionId="test_session" />);
 
       expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Notes' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Profile' })).toBeInTheDocument();
     });
 
     it('renders messages', () => {
@@ -96,44 +97,50 @@ describe('Chat', () => {
   });
 
   describe('tabs', () => {
+    const mockFacts: Fact[] = [
+      { id: 1, content: 'Likes anime', source: 'tutor', created_at: '2024-01-15T10:00:00Z' },
+      { id: 2, content: 'Learning for travel', source: 'manual', created_at: '2024-01-15T11:00:00Z' },
+    ];
+
     it('shows chat tab by default', () => {
       render(<Chat sessionId="test_session" />);
 
       expect(screen.getByText('こんにちは')).toBeInTheDocument();
     });
 
-    it('switches to notes tab when clicked', async () => {
+    it('switches to profile tab when clicked', async () => {
       const user = userEvent.setup();
-      render(<Chat sessionId="test_session" blackboardContent="# Notes" />);
+      render(<Chat sessionId="test_session" facts={mockFacts} />);
 
-      await user.click(screen.getByRole('button', { name: 'Notes' }));
+      await user.click(screen.getByRole('button', { name: 'Profile' }));
 
-      expect(screen.getByText('Study Notes')).toBeInTheDocument();
+      expect(screen.getByText('Student Profile')).toBeInTheDocument();
     });
 
-    it('shows notes content in notes tab', async () => {
+    it('shows facts in profile tab', async () => {
       const user = userEvent.setup();
-      render(<Chat sessionId="test_session" blackboardContent="## Current Focus\nLearn verbs" />);
+      render(<Chat sessionId="test_session" facts={mockFacts} />);
 
-      await user.click(screen.getByRole('button', { name: 'Notes' }));
+      await user.click(screen.getByRole('button', { name: 'Profile' }));
 
-      expect(screen.getByTestId('markdown')).toBeInTheDocument();
+      expect(screen.getByText('Likes anime')).toBeInTheDocument();
+      expect(screen.getByText('Learning for travel')).toBeInTheDocument();
     });
 
-    it('shows empty notes message when no content', async () => {
+    it('shows empty profile message when no facts', async () => {
       const user = userEvent.setup();
-      render(<Chat sessionId="test_session" />);
+      render(<Chat sessionId="test_session" facts={[]} />);
 
-      await user.click(screen.getByRole('button', { name: 'Notes' }));
+      await user.click(screen.getByRole('button', { name: 'Profile' }));
 
-      expect(screen.getByText('No notes yet')).toBeInTheDocument();
+      expect(screen.getByText('No profile yet')).toBeInTheDocument();
     });
 
     it('switches back to chat tab', async () => {
       const user = userEvent.setup();
-      render(<Chat sessionId="test_session" blackboardContent="# Notes" />);
+      render(<Chat sessionId="test_session" facts={mockFacts} />);
 
-      await user.click(screen.getByRole('button', { name: 'Notes' }));
+      await user.click(screen.getByRole('button', { name: 'Profile' }));
       await user.click(screen.getByRole('button', { name: 'Chat' }));
 
       expect(screen.getByText('こんにちは')).toBeInTheDocument();
@@ -382,26 +389,41 @@ describe('Chat', () => {
     });
   });
 
-  describe('notes tab features', () => {
-    it('shows refresh button when onRefreshNotes provided', async () => {
-      const onRefreshNotes = vi.fn();
+  describe('profile tab features', () => {
+    const mockFacts: Fact[] = [
+      { id: 1, content: 'Likes anime', source: 'tutor', created_at: '2024-01-15T10:00:00Z' },
+    ];
+
+    it('shows add fact button', async () => {
       const user = userEvent.setup();
-      render(<Chat sessionId="test_session" blackboardContent="# Notes" onRefreshNotes={onRefreshNotes} />);
+      render(<Chat sessionId="test_session" facts={mockFacts} />);
 
-      await user.click(screen.getByRole('button', { name: 'Notes' }));
+      await user.click(screen.getByRole('button', { name: 'Profile' }));
 
-      expect(screen.getByTitle('Refresh')).toBeInTheDocument();
+      expect(screen.getByTitle('Add fact')).toBeInTheDocument();
     });
 
-    it('calls onRefreshNotes when refresh clicked', async () => {
-      const onRefreshNotes = vi.fn();
+    it('shows add fact form when add button clicked', async () => {
       const user = userEvent.setup();
-      render(<Chat sessionId="test_session" blackboardContent="# Notes" onRefreshNotes={onRefreshNotes} />);
+      render(<Chat sessionId="test_session" facts={mockFacts} onAddFact={vi.fn()} />);
 
-      await user.click(screen.getByRole('button', { name: 'Notes' }));
-      await user.click(screen.getByTitle('Refresh'));
+      await user.click(screen.getByRole('button', { name: 'Profile' }));
+      await user.click(screen.getByTitle('Add fact'));
 
-      expect(onRefreshNotes).toHaveBeenCalled();
+      expect(screen.getByPlaceholderText('Add a new fact about yourself...')).toBeInTheDocument();
+    });
+
+    it('calls onAddFact when saving new fact', async () => {
+      const onAddFact = vi.fn().mockResolvedValue({ id: 2, content: 'New fact', source: 'manual' });
+      const user = userEvent.setup();
+      render(<Chat sessionId="test_session" facts={mockFacts} onAddFact={onAddFact} />);
+
+      await user.click(screen.getByRole('button', { name: 'Profile' }));
+      await user.click(screen.getByTitle('Add fact'));
+      await user.type(screen.getByPlaceholderText('Add a new fact about yourself...'), 'New fact');
+      await user.click(screen.getByText('Save'));
+
+      expect(onAddFact).toHaveBeenCalledWith('New fact');
     });
   });
 

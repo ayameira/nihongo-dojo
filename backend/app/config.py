@@ -41,9 +41,13 @@ class Settings(BaseSettings):
     gemini_model: str = DEFAULT_MODEL
 
     # Paths
-    student_record_path: str = "./STUDENT_RECORD.md"
     anki_collection_path: str = ""
     ai_logs_path: str = "./logs/ai_interactions"
+
+    # TTS (VOICEVOX)
+    voicevox_url: str = "http://127.0.0.1:50021"
+    tts_cache_dir: str = "./audio_cache"
+    default_speaker_id: int = 2  # Shikoku Metan - Normal Style
 
     # Cost tracking (auto-set from model, but can be overridden)
     cost_limit_weekly: float = 10.0

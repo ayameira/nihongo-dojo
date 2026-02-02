@@ -62,3 +62,13 @@ class ChatSession(Base):
     summary = Column(Text, nullable=True)  # Compacted conversation summary
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class StudentFact(Base):
+    __tablename__ = "student_facts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    content = Column(Text, nullable=False)
+    source = Column(String(20), default="tutor")  # "tutor" or "compaction"
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

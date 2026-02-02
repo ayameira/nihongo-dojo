@@ -4,6 +4,8 @@ import VocabSidebar from './components/VocabSidebar';
 import RightSidebar from './components/RightSidebar';
 import CostDashboard from './components/CostDashboard';
 import { useSessions } from './hooks/useSessions';
+import { useTTS } from './hooks/useTTS';
+import { useFacts } from './hooks/useFacts';
 
 interface LimitInfo {
   spent: number;
@@ -19,7 +21,6 @@ const DEFAULT_RIGHT_WIDTH = 240;
 const COLLAPSED_WIDTH = 48;
 
 function App() {
-  const [notesContent, setNotesContent] = useState<string>("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('nihongo_sidebar_collapsed');
     return saved ? JSON.parse(saved) : false;
@@ -55,17 +56,23 @@ function App() {
     deleteSession,
   } = useSessions();
 
-  const fetchNotes = useCallback(async () => {
-    try {
-      const response = await fetch('/api/notes');
-      if (response.ok) {
-        const data = await response.json();
-        setNotesContent(data.content);
-      }
-    } catch (error) {
-      console.error('Failed to fetch notes:', error);
-    }
-  }, []);
+  // TTS voice selection
+  const {
+    speakers,
+    selectedSpeakerId,
+    error: ttsError,
+    setSelectedSpeakerId,
+  } = useTTS();
+
+  // Student facts management
+  const {
+    facts,
+    isLoading: factsLoading,
+    addFact,
+    updateFact,
+    deleteFact,
+    refreshFacts,
+  } = useFacts();
 
   const fetchLimitInfo = useCallback(async () => {
     try {
@@ -80,15 +87,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    fetchNotes();
     fetchLimitInfo();
-    const notesInterval = setInterval(fetchNotes, 30000);
     const limitInterval = setInterval(fetchLimitInfo, 30000);
     return () => {
-      clearInterval(notesInterval);
       clearInterval(limitInterval);
     };
-  }, [fetchNotes, fetchLimitInfo]);
+  }, [fetchLimitInfo]);
 
   useEffect(() => {
     localStorage.setItem('nihongo_sidebar_collapsed', JSON.stringify(sidebarCollapsed));
@@ -203,9 +207,14 @@ function App() {
           </div>
         ) : (
           <Chat
-            blackboardContent={notesContent}
-            onRefreshNotes={fetchNotes}
+            facts={facts}
+            factsLoading={factsLoading}
+            onAddFact={addFact}
+            onUpdateFact={updateFact}
+            onDeleteFact={deleteFact}
+            onRefreshFacts={refreshFacts}
             sessionId={currentSessionId}
+            selectedSpeakerId={selectedSpeakerId}
           />
         )}
       </main>
@@ -232,6 +241,10 @@ function App() {
           isCollapsed={rightSidebarCollapsed}
           onToggle={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
           onBudgetClick={() => setShowCostDashboard(true)}
+          speakers={speakers}
+          selectedSpeakerId={selectedSpeakerId}
+          onSpeakerChange={setSelectedSpeakerId}
+          ttsError={ttsError}
         />
       </div>
 

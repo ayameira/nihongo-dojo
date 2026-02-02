@@ -13,8 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func, update
 
 from app.db.database import async_session_maker
-from app.db.models import ChatMessage, ChatSession
-from app.services.notes_service import NotesService
+from app.db.models import ChatMessage, ChatSession, StudentFact
 from app.config import get_settings, Settings
 from app.core.gemini_client import GeminiClient
 
@@ -67,7 +66,6 @@ class MemoryService:
 
     def __init__(self, settings: Optional[Settings] = None):
         self.settings = settings or get_settings()
-        self.notes_service = NotesService()
 
     async def get_active_message_count(self, session_id: str) -> int:
         """Get the count of non-archived messages for a session."""
@@ -115,9 +113,9 @@ class MemoryService:
             # Step 5: Save new summary to ChatSession
             await self._save_session_summary(session_id, compaction_result.new_summary)
 
-            # Step 6: If new student facts, update STUDENT_RECORD.md
+            # Step 6: If new student facts, add them to the database
             if compaction_result.new_student_facts:
-                await self._update_student_record(compaction_result.new_student_facts)
+                await self._add_student_facts(compaction_result.new_student_facts)
 
             # Step 7: Mark messages as archived (only after successful save)
             message_ids = [m.id for m in messages]
@@ -202,19 +200,34 @@ class MemoryService:
             await session.execute(stmt)
             await session.commit()
 
-    async def _update_student_record(self, new_facts: str) -> None:
-        """Append new facts to the student record's Notes section."""
+    async def _add_student_facts(self, new_facts: str) -> None:
+        """Add extracted facts to the student_facts table."""
         try:
-            await self.notes_service.update_student_record_section(
-                self.settings.student_record_path,
-                section="notes",
-                new_content=new_facts,
-                action="append",
-            )
-            logger.info("Updated student record with new facts")
+            # Parse facts (expect newline or bullet-separated list)
+            fact_lines = [
+                line.strip().lstrip("- ").lstrip("* ").strip()
+                for line in new_facts.split("\n")
+                if line.strip() and not line.strip().startswith("#")
+            ]
+
+            added_count = 0
+            async with async_session_maker() as session:
+                for fact_text in fact_lines:
+                    if not fact_text:
+                        continue
+                    # Check for duplicate before adding
+                    stmt = select(StudentFact).where(StudentFact.content == fact_text)
+                    existing = (await session.execute(stmt)).scalar_one_or_none()
+                    if not existing:
+                        session.add(StudentFact(content=fact_text, source="compaction"))
+                        added_count += 1
+
+                await session.commit()
+
+            logger.info(f"Added {added_count} facts from compaction")
         except Exception as e:
             # Log but don't fail compaction - summary is more important
-            logger.error(f"Failed to update student record: {e}")
+            logger.error(f"Failed to add student facts: {e}")
 
     async def _archive_messages(self, message_ids: List[int]) -> None:
         """Mark messages as archived."""
