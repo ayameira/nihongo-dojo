@@ -1,7 +1,10 @@
 from typing import Optional, List, Dict
 from datetime import date
+import logging
 
 from app.core.agents import TUTOR_SYSTEM_PROMPT_TEMPLATE, LISTENER_SYSTEM_PROMPT_TEMPLATE
+
+logger = logging.getLogger(__name__)
 
 
 async def build_tutor_context(
@@ -22,12 +25,17 @@ async def build_tutor_context(
     # Format vocab list
     vocab_formatted = format_vocab_list(vocab_list)
 
+    # Fetch learning grammar
+    grammar_list = await fetch_learning_grammar()
+    grammar_formatted = format_grammar_list(grammar_list)
+
     # Build system prompt using Tutor template (no tool instructions)
     system_prompt = TUTOR_SYSTEM_PROMPT_TEMPLATE.format(
         today=date.today().isoformat(),
         student_facts_formatted=student_facts_formatted,
         session_summary=session_summary or "(No previous conversation in this session)",
         vocab_list_formatted=vocab_formatted or "(No vocabulary loaded)",
+        grammar_list_formatted=grammar_formatted or "(No grammar points loaded)",
     )
 
     # Fetch chat history (last 30 non-archived messages)
@@ -41,6 +49,7 @@ async def build_tutor_context(
             "student_facts": student_facts,
             "session_summary": session_summary or "",
             "vocab_list": vocab_list,
+            "grammar_list": grammar_list,
         },
     }
 
@@ -59,9 +68,14 @@ async def build_listener_context(
     student_facts = await fetch_student_facts()
     student_facts_formatted = format_student_facts(student_facts)
 
+    # Load learning grammar with IDs for the Listener to reference
+    learning_grammar = await fetch_learning_grammar()
+    learning_grammar_formatted = format_grammar_list_with_ids(learning_grammar)
+
     # Build system prompt using Listener template
     system_prompt = LISTENER_SYSTEM_PROMPT_TEMPLATE.format(
         student_facts_formatted=student_facts_formatted,
+        learning_grammar_formatted=learning_grammar_formatted,
         tutor_message=tutor_message,
         user_message=user_message,
     )
@@ -183,3 +197,59 @@ async def get_chat_history(session_id: str, limit: int = 15) -> List[Dict]:
             return history
     except Exception:
         return []
+
+
+async def fetch_learning_grammar() -> List[Dict]:
+    """Fetch ALL grammar points with 'Learning' status."""
+    from app.db.database import async_session_maker
+    from app.db.models import GrammarEntry
+    from sqlalchemy import select
+
+    try:
+        async with async_session_maker() as session:
+            stmt = (
+                select(GrammarEntry)
+                .where(GrammarEntry.status == "Learning")
+                .order_by(GrammarEntry.jlpt_level.asc(), GrammarEntry.updated_at.desc())
+            )
+            result = await session.execute(stmt)
+            entries = result.scalars().all()
+
+            return [
+                {
+                    "id": e.id,
+                    "pattern": e.pattern,
+                    "meaning": e.meaning,
+                    "jlpt_level": e.jlpt_level,
+                }
+                for e in entries
+            ]
+    except Exception as e:
+        logger.error(f"Error fetching learning grammar: {e}")
+        return []
+
+
+def format_grammar_list(grammar_list: List[Dict]) -> str:
+    """Format grammar list for the system prompt."""
+    if not grammar_list:
+        return ""
+
+    lines = []
+    for g in grammar_list:
+        level_tag = f"[{g['jlpt_level']}] " if g.get('jlpt_level') else ""
+        lines.append(f"- {level_tag}{g['pattern']} ({g['meaning']})")
+
+    return "\n".join(lines)
+
+
+def format_grammar_list_with_ids(grammar_list: List[Dict]) -> str:
+    """Format grammar list with IDs for the Listener to reference."""
+    if not grammar_list:
+        return "(No grammar points being learned)"
+
+    lines = []
+    for g in grammar_list:
+        level_tag = f"[{g['jlpt_level']}] " if g.get('jlpt_level') else ""
+        lines.append(f"- [{g['id']}] {level_tag}{g['pattern']} ({g['meaning']})")
+
+    return "\n".join(lines)

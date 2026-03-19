@@ -4,11 +4,69 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 import asyncio
+import logging
 
 from app.db.database import get_session
 from app.config import get_settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def generate_session_title(session_id: str, first_message: str):
+    """Generate a short title for the chat session based on the first message.
+
+    Runs as a background task after the first message in a session.
+    """
+    from app.db.database import async_session_maker
+    from app.db.models import ChatSession
+    from app.core.gemini_client import GeminiClient
+    from sqlalchemy import select
+
+    settings = get_settings()
+
+    if not settings.gemini_api_key:
+        logger.warning("No Gemini API key, skipping title generation")
+        return
+
+    try:
+        client = GeminiClient(settings)
+
+        # Truncate message for prompt efficiency
+        message_preview = first_message[:500] if len(first_message) > 500 else first_message
+
+        prompt = f"""Generate a very short title (3-6 words) for a Japanese learning chat session that starts with this message:
+
+"{message_preview}"
+
+The title should:
+- Be in English
+- Capture the main topic or question
+- Be concise and descriptive
+- Not include quotes or punctuation at the end
+
+Return JSON: {{"title": "your title here"}}"""
+
+        result = await client.generate_json(prompt)
+        title = result.get("result", {}).get("title", "").strip()
+
+        if not title:
+            logger.warning(f"Empty title generated for session {session_id}")
+            return
+
+        # Update the session with the generated title
+        async with async_session_maker() as session:
+            stmt = select(ChatSession).where(ChatSession.id == session_id)
+            db_result = await session.execute(stmt)
+            chat_session = db_result.scalar_one_or_none()
+
+            if chat_session and not chat_session.name:
+                chat_session.name = title[:200]  # Respect max length
+                await session.commit()
+                logger.info(f"Generated title for session {session_id}: {title}")
+
+    except Exception as e:
+        logger.error(f"Failed to generate title for session {session_id}: {e}")
 
 
 class ChatRequest(BaseModel):
@@ -27,6 +85,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
     from app.services.request_logger import RequestLogger
     from app.services.memory_service import run_compaction_if_needed
     from app.services.listener_service import run_listener
+    from app.services.grammar_assessor import run_grammar_assessment
     from sqlalchemy import select
 
     request_logger = RequestLogger(settings.ai_logs_path)
@@ -78,6 +137,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             result = await session.execute(stmt)
             chat_session = result.scalar_one_or_none()
 
+            is_first_message = False
             if not chat_session:
                 # Create new session with preview from first message
                 preview = request.message[:100] if request.message else None
@@ -87,6 +147,11 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
                     message_count=0,
                 )
                 session.add(chat_session)
+                is_first_message = True
+            elif not chat_session.preview and request.message:
+                # Set preview if this is the first message in an existing session
+                chat_session.preview = request.message[:100]
+                is_first_message = True
 
             # Update session metadata
             chat_session.message_count += 2  # user + assistant
@@ -135,6 +200,18 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
 
             # Schedule memory compaction check as background task (non-blocking)
             background_tasks.add_task(run_compaction_if_needed, request.session_id)
+
+            # Schedule grammar assessment every 20 messages
+            if chat_session.message_count % 20 == 0:
+                background_tasks.add_task(run_grammar_assessment)
+
+            # Generate title for new sessions
+            if is_first_message:
+                background_tasks.add_task(
+                    generate_session_title,
+                    request.session_id,
+                    request.message,
+                )
 
         # Log the complete interaction to disk
         raw_context = context.get("_raw", {})

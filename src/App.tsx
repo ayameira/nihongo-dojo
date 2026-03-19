@@ -3,9 +3,11 @@ import Chat from './components/Chat';
 import VocabSidebar from './components/VocabSidebar';
 import RightSidebar from './components/RightSidebar';
 import CostDashboard from './components/CostDashboard';
+import GrammarPage from './components/GrammarPage';
 import { useSessions } from './hooks/useSessions';
 import { useTTS } from './hooks/useTTS';
 import { useFacts } from './hooks/useFacts';
+import { useTheme } from './hooks/useTheme';
 
 interface LimitInfo {
   spent: number;
@@ -38,6 +40,7 @@ function App() {
     return saved ? parseInt(saved, 10) : DEFAULT_RIGHT_WIDTH;
   });
   const [showCostDashboard, setShowCostDashboard] = useState(false);
+  const [currentView, setCurrentView] = useState<'chat' | 'grammar'>('chat');
   const [limitInfo, setLimitInfo] = useState<LimitInfo | null>(null);
   const [isResizingLeft, setIsResizingLeft] = useState(false);
   const [isResizingRight, setIsResizingRight] = useState(false);
@@ -54,6 +57,7 @@ function App() {
     switchSession,
     renameSession,
     deleteSession,
+    refreshSessions,
   } = useSessions();
 
   // TTS voice selection
@@ -74,9 +78,12 @@ function App() {
     refreshFacts,
   } = useFacts();
 
+  // Initialize theme (applies dark class to html element)
+  useTheme();
+
   const fetchLimitInfo = useCallback(async () => {
     try {
-      const response = await fetch('/api/telemetry/limit');
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/telemetry/limit');
       if (response.ok) {
         const data = await response.json();
         setLimitInfo(data);
@@ -170,7 +177,7 @@ function App() {
   const weeklyLimit = limitInfo?.limit || 10;
 
   return (
-    <div ref={containerRef} className="flex h-screen bg-gray-100">
+    <div ref={containerRef} className="flex h-screen bg-paper">
       {/* Vocabulary Sidebar */}
       <div
         ref={leftSidebarRef}
@@ -185,13 +192,15 @@ function App() {
           onSessionRename={renameSession}
           onSessionDelete={deleteSession}
           onNewChat={createSession}
+          currentView={currentView}
+          onViewChange={setCurrentView}
         />
       </div>
 
       {/* Left Resize Handle */}
       {!sidebarCollapsed && (
         <div
-          className="w-1 hover:w-1 bg-transparent hover:bg-blue-400 cursor-col-resize transition-colors flex-shrink-0"
+          className="w-1 hover:w-1 bg-transparent hover:bg-vermillion/50 cursor-col-resize transition-colors flex-shrink-0"
           onMouseDown={(e) => {
             e.preventDefault();
             setIsResizingLeft(true);
@@ -201,28 +210,33 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col relative min-w-0">
-        {sessionsLoading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-gray-500">Loading...</div>
-          </div>
+        {currentView === 'chat' ? (
+          sessionsLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-ink-muted">Loading...</div>
+            </div>
+          ) : (
+            <Chat
+              facts={facts}
+              factsLoading={factsLoading}
+              onAddFact={addFact}
+              onUpdateFact={updateFact}
+              onDeleteFact={deleteFact}
+              onRefreshFacts={refreshFacts}
+              sessionId={currentSessionId}
+              selectedSpeakerId={selectedSpeakerId}
+              onRefreshSessions={refreshSessions}
+            />
+          )
         ) : (
-          <Chat
-            facts={facts}
-            factsLoading={factsLoading}
-            onAddFact={addFact}
-            onUpdateFact={updateFact}
-            onDeleteFact={deleteFact}
-            onRefreshFacts={refreshFacts}
-            sessionId={currentSessionId}
-            selectedSpeakerId={selectedSpeakerId}
-          />
+          <GrammarPage />
         )}
       </main>
 
       {/* Right Resize Handle */}
       {!rightSidebarCollapsed && (
         <div
-          className="w-1 hover:w-1 bg-transparent hover:bg-blue-400 cursor-col-resize transition-colors flex-shrink-0"
+          className="w-1 hover:w-1 bg-transparent hover:bg-vermillion/50 cursor-col-resize transition-colors flex-shrink-0"
           onMouseDown={(e) => {
             e.preventDefault();
             setIsResizingRight(true);

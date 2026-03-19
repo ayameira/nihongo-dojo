@@ -22,7 +22,7 @@ export function useFacts(): UseFactsReturn {
 
   const fetchFacts = useCallback(async () => {
     try {
-      const response = await fetch('/api/notes/facts');
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/notes/facts');
       if (response.ok) {
         const data = await response.json();
         setFacts(data.facts);
@@ -43,7 +43,7 @@ export function useFacts(): UseFactsReturn {
 
   const addFact = useCallback(async (content: string): Promise<Fact | null> => {
     try {
-      const response = await fetch('/api/notes/facts', {
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/notes/facts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
@@ -62,7 +62,7 @@ export function useFacts(): UseFactsReturn {
 
   const updateFact = useCallback(async (id: number, content: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/notes/facts/${id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/notes/facts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
@@ -82,7 +82,7 @@ export function useFacts(): UseFactsReturn {
 
   const deleteFact = useCallback(async (id: number): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/notes/facts/${id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/notes/facts/${id}`, {
         method: 'DELETE',
       });
 

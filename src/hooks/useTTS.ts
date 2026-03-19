@@ -35,15 +35,10 @@ export function useTTS(): UseTTSReturn {
   useEffect(() => {
     const fetchSpeakers = async () => {
       try {
-        const response = await fetch('/api/media/speakers');
+        const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/media/speakers');
 
         if (!response.ok) {
-          if (response.status === 503) {
-            setError('VOICEVOX not running');
-          } else {
-            setError('Failed to load voices');
-          }
-          return;
+          throw new Error('Failed to load voices');
         }
 
         const data: SpeakersResponse = await response.json();
@@ -51,13 +46,18 @@ export function useTTS(): UseTTSReturn {
 
         // If stored speaker doesn't exist in available speakers, use default
         const stored = localStorage.getItem(STORAGE_KEY);
-        if (!stored || !data.speakers.some(s => s.id === parseInt(stored, 10))) {
+        if (!stored || !data.speakers.some((s) => s.id === parseInt(stored, 10))) {
           setSelectedSpeakerIdState(data.default_speaker_id);
         }
 
         setError(null);
       } catch (err) {
-        setError('Failed to connect');
+        // Fallback to Web Speech API
+        setSpeakers([
+          { id: 0, name: 'Browser TTS', style: 'Default', display_name: 'Web Speech API (Fallback)' },
+        ]);
+        setSelectedSpeakerIdState(0);
+        setError(null);
       } finally {
         setIsLoading(false);
       }

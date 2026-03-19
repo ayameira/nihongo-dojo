@@ -72,3 +72,21 @@ class StudentFact(Base):
     source = Column(String(20), default="tutor")  # "tutor" or "compaction"
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class GrammarEntry(Base):
+    __tablename__ = "grammar_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pattern = Column(String(200), nullable=False)  # e.g. "ている", "が 1"
+    meaning = Column(Text, nullable=False)  # English meaning
+    jlpt_level = Column(String(5), nullable=True)  # "N5"-"N1", null for custom
+    status = Column(String(20), default="New")  # "New" | "Learning" | "Burned"
+    source = Column(String(20), default="jlpt")  # "jlpt" | "manual" | "tutor"
+    notes = Column(Text, nullable=True)  # Usage notes from user/AI
+    times_seen = Column(Integer, default=0)
+    times_correct = Column(Integer, default=0)
+    last_assessed_at = Column(DateTime, nullable=True)  # Prevents re-assessment within cooldown
+    last_seen_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

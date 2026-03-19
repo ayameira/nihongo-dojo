@@ -29,6 +29,8 @@ interface VocabSidebarProps {
   onSessionRename?: (sessionId: string, name: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onNewChat?: () => void;
+  currentView?: 'chat' | 'grammar';
+  onViewChange?: (view: 'chat' | 'grammar') => void;
 }
 
 export const VocabSidebar: React.FC<VocabSidebarProps> = ({
@@ -40,6 +42,8 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   onSessionRename,
   onSessionDelete,
   onNewChat,
+  currentView = 'chat',
+  onViewChange,
 }) => {
   const [stats, setStats] = useState<VocabStats>({ new: 0, learning: 0, mature: 0, total: 0 });
   const [learningVocab, setLearningVocab] = useState<VocabEntry[]>([]);
@@ -58,7 +62,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch('/api/vocab/stats');
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/vocab/stats');
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -70,7 +74,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
   const fetchLearningVocab = useCallback(async () => {
     try {
-      const response = await fetch('/api/vocab/learning?limit=50');
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/vocab/learning?limit=50');
       if (response.ok) {
         const data = await response.json();
         setLearningVocab(data);
@@ -82,7 +86,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
   const fetchMatureVocab = useCallback(async () => {
     try {
-      const response = await fetch('/api/vocab?status=Mature&limit=50');
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/vocab?status=Mature&limit=50');
       if (response.ok) {
         const data = await response.json();
         setMatureVocab(data.items || []);
@@ -94,7 +98,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
   const fetchNewVocab = useCallback(async () => {
     try {
-      const response = await fetch('/api/vocab?status=New&limit=50');
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/vocab?status=New&limit=50');
       if (response.ok) {
         const data = await response.json();
         setNewVocab(data.items || []);
@@ -106,7 +110,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
   const fetchAnkiPath = useCallback(async () => {
     try {
-      const response = await fetch('/api/config/anki-path');
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/config/anki-path');
       if (response.ok) {
         const data = await response.json();
         setAnkiPath(data.path);
@@ -119,7 +123,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
   const saveAnkiPath = async (path: string) => {
     try {
-      const response = await fetch('/api/config/anki-path', {
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/config/anki-path', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path }),
@@ -140,7 +144,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
     setIsSyncing(true);
     setSyncMessage('Syncing...');
     try {
-      const response = await fetch('/api/config/sync-anki', { method: 'POST' });
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/config/sync-anki', { method: 'POST' });
       if (response.ok) {
         const data = await response.json();
         setSyncMessage(`Synced: ${data.imported} new, ${data.updated} updated`);
@@ -189,7 +193,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
     setIsSearching(true);
     try {
-      const response = await fetch(`/api/vocab?search=${encodeURIComponent(query)}&limit=20`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/vocab?search=${encodeURIComponent(query)}&limit=20`);
       if (response.ok) {
         const data = await response.json();
         setSearchResults(data.items || []);
@@ -204,7 +208,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
       return (
         <span>
           <span className="font-medium">{vocab.kanji}</span>
-          <span className="text-gray-500 text-xs ml-1">({vocab.kana})</span>
+          <span className="text-ink-muted text-xs ml-1">({vocab.kana})</span>
         </span>
       );
     }
@@ -213,10 +217,10 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="w-full h-full bg-white border-r border-gray-200 flex flex-col items-center py-4">
+      <div className="w-full h-full bg-paper border-r border-paper-dark flex flex-col items-center py-4">
         <button
           onClick={onToggle}
-          className="p-2 hover:bg-gray-100 rounded-lg"
+          className="p-2 hover:bg-paper-dark rounded-lg text-ink-muted hover:text-ink"
           title="Expand vocabulary"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -224,22 +228,48 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
           </svg>
         </button>
         <div className="mt-4 text-xs text-center">
-          <div className="text-yellow-600 font-bold">{stats.learning}</div>
-          <div className="text-gray-400">学習</div>
+          <div className="text-yellow-600 dark:text-yellow-400 font-bold">{stats.learning}</div>
+          <div className="text-ink-muted">学習</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full bg-white border-r border-gray-200 flex flex-col h-full">
+    <div className="w-full bg-paper border-r border-paper-dark flex flex-col h-full">
+      {/* View Switcher */}
+      {onViewChange && (
+        <div className="p-2 border-b border-paper-dark flex gap-1">
+          <button
+            onClick={() => onViewChange('chat')}
+            className={`flex-1 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
+              currentView === 'chat'
+                ? 'bg-vermillion text-white'
+                : 'text-ink-muted hover:bg-paper-warm hover:text-ink'
+            }`}
+          >
+            Chat
+          </button>
+          <button
+            onClick={() => onViewChange('grammar')}
+            className={`flex-1 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
+              currentView === 'grammar'
+                ? 'bg-vermillion text-white'
+                : 'text-ink-muted hover:bg-paper-warm hover:text-ink'
+            }`}
+          >
+            Grammar
+          </button>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="font-bold text-gray-800">Vocabulary</h2>
+      <div className="p-4 border-b border-paper-dark flex items-center justify-between">
+        <h2 className="font-bold text-ink">Vocabulary</h2>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowConfig(true)}
-            className="p-1 hover:bg-gray-100 rounded"
+            className="p-1 hover:bg-paper-dark rounded text-ink-muted hover:text-ink"
             title="Settings"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -249,7 +279,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
           </button>
           <button
             onClick={onToggle}
-            className="p-1 hover:bg-gray-100 rounded"
+            className="p-1 hover:bg-paper-dark rounded text-ink-muted hover:text-ink"
             title="Collapse"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -262,7 +292,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
       {/* Sessions */}
       {onSessionSelect && onSessionRename && onSessionDelete && onNewChat && (
-        <div className="border-b border-gray-200">
+        <div className="border-b border-paper-dark">
           <SessionList
             sessions={sessions}
             currentSessionId={currentSessionId}
@@ -275,13 +305,13 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
       )}
 
       {/* Search */}
-      <div className="p-2 border-b border-gray-100">
+      <div className="p-2 border-b border-paper-dark">
         <input
           type="text"
           placeholder="Search vocab..."
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
-          className="w-full px-3 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full px-3 py-1.5 text-sm bg-paper-warm border border-paper-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-vermillion text-ink placeholder:text-ink-muted"
         />
       </div>
 
@@ -290,17 +320,17 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
         {isSearching ? (
           // Search Results
           <div className="p-2">
-            <div className="text-xs text-gray-500 mb-2">
+            <div className="text-xs text-ink-muted mb-2">
               {searchResults.length} results
             </div>
             {searchResults.map((vocab) => (
               <button
                 key={vocab.id}
                 onClick={() => setSelectedVocab(vocab)}
-                className="w-full text-left p-2 hover:bg-gray-50 rounded-lg text-sm"
+                className="w-full text-left p-2 hover:bg-paper-warm rounded-lg text-sm text-ink"
               >
                 {formatVocabDisplay(vocab)}
-                <div className="text-xs text-gray-500 truncate">{vocab.meaning}</div>
+                <div className="text-xs text-ink-muted truncate">{vocab.meaning}</div>
               </button>
             ))}
           </div>
@@ -308,21 +338,21 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
           // Category View
           <>
             {/* Learning Section */}
-            <div className="border-b border-gray-100">
+            <div className="border-b border-paper-dark">
               <button
                 onClick={() => setExpandedSection(expandedSection === 'learning' ? '' : 'learning')}
-                className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
+                className="w-full p-3 flex items-center justify-between hover:bg-paper-warm text-ink"
               >
                 <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-yellow-500 dark:bg-yellow-400"></span>
                   <span className="font-medium text-sm">Learning</span>
                 </span>
-                <span className="text-sm text-gray-500">{stats.learning}</span>
+                <span className="text-sm text-ink-muted">{stats.learning}</span>
               </button>
               {expandedSection === 'learning' && (
                 <div className="px-2 pb-2 max-h-60 overflow-y-auto">
                   {learningVocab.length === 0 ? (
-                    <div className="text-xs text-gray-400 p-2 text-center">
+                    <div className="text-xs text-ink-muted p-2 text-center">
                       No vocabulary yet
                     </div>
                   ) : (
@@ -330,10 +360,10 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
                       <button
                         key={vocab.id}
                         onClick={() => setSelectedVocab(vocab)}
-                        className="w-full text-left p-2 hover:bg-gray-50 rounded text-sm"
+                        className="w-full text-left p-2 hover:bg-paper-warm rounded text-sm text-ink"
                       >
                         {formatVocabDisplay(vocab)}
-                        <div className="text-xs text-gray-500 truncate">{vocab.meaning}</div>
+                        <div className="text-xs text-ink-muted truncate">{vocab.meaning}</div>
                       </button>
                     ))
                   )}
@@ -342,21 +372,21 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
             </div>
 
             {/* Mature Section */}
-            <div className="border-b border-gray-100">
+            <div className="border-b border-paper-dark">
               <button
                 onClick={() => setExpandedSection(expandedSection === 'mature' ? '' : 'mature')}
-                className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
+                className="w-full p-3 flex items-center justify-between hover:bg-paper-warm text-ink"
               >
                 <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-jade"></span>
                   <span className="font-medium text-sm">Mature</span>
                 </span>
-                <span className="text-sm text-gray-500">{stats.mature}</span>
+                <span className="text-sm text-ink-muted">{stats.mature}</span>
               </button>
               {expandedSection === 'mature' && (
                 <div className="px-2 pb-2 max-h-60 overflow-y-auto">
                   {matureVocab.length === 0 ? (
-                    <div className="text-xs text-gray-400 p-2 text-center">
+                    <div className="text-xs text-ink-muted p-2 text-center">
                       No mature vocabulary yet
                     </div>
                   ) : (
@@ -364,10 +394,10 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
                       <button
                         key={vocab.id}
                         onClick={() => setSelectedVocab(vocab)}
-                        className="w-full text-left p-2 hover:bg-gray-50 rounded text-sm"
+                        className="w-full text-left p-2 hover:bg-paper-warm rounded text-sm text-ink"
                       >
                         {formatVocabDisplay(vocab)}
-                        <div className="text-xs text-gray-500 truncate">{vocab.meaning}</div>
+                        <div className="text-xs text-ink-muted truncate">{vocab.meaning}</div>
                       </button>
                     ))
                   )}
@@ -376,21 +406,21 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
             </div>
 
             {/* New Section */}
-            <div className="border-b border-gray-100">
+            <div className="border-b border-paper-dark">
               <button
                 onClick={() => setExpandedSection(expandedSection === 'new' ? '' : 'new')}
-                className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
+                className="w-full p-3 flex items-center justify-between hover:bg-paper-warm text-ink"
               >
                 <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400"></span>
                   <span className="font-medium text-sm">New</span>
                 </span>
-                <span className="text-sm text-gray-500">{stats.new}</span>
+                <span className="text-sm text-ink-muted">{stats.new}</span>
               </button>
               {expandedSection === 'new' && (
                 <div className="px-2 pb-2 max-h-60 overflow-y-auto">
                   {newVocab.length === 0 ? (
-                    <div className="text-xs text-gray-400 p-2 text-center">
+                    <div className="text-xs text-ink-muted p-2 text-center">
                       No new vocabulary yet
                     </div>
                   ) : (
@@ -398,10 +428,10 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
                       <button
                         key={vocab.id}
                         onClick={() => setSelectedVocab(vocab)}
-                        className="w-full text-left p-2 hover:bg-gray-50 rounded text-sm"
+                        className="w-full text-left p-2 hover:bg-paper-warm rounded text-sm text-ink"
                       >
                         {formatVocabDisplay(vocab)}
-                        <div className="text-xs text-gray-500 truncate">{vocab.meaning}</div>
+                        <div className="text-xs text-ink-muted truncate">{vocab.meaning}</div>
                       </button>
                     ))
                   )}
@@ -414,20 +444,20 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
       {/* Vocab Detail Modal */}
       {selectedVocab && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 p-4">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/75 flex items-center justify-center z-50">
+          <div className="bg-paper rounded-lg shadow-xl max-w-sm w-full mx-4 p-4 dark:border dark:border-paper-dark">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-xl font-bold">
+                <h3 className="text-xl font-bold text-ink">
                   {selectedVocab.kanji || selectedVocab.kana}
                 </h3>
                 {selectedVocab.kanji && (
-                  <p className="text-gray-500">{selectedVocab.kana}</p>
+                  <p className="text-ink-muted">{selectedVocab.kana}</p>
                 )}
               </div>
               <button
                 onClick={() => setSelectedVocab(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-ink-muted hover:text-ink"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"/>
@@ -435,8 +465,8 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
                 </svg>
               </button>
             </div>
-            <p className="text-gray-700 mb-4">{selectedVocab.meaning}</p>
-            <div className="text-sm text-gray-500">
+            <p className="text-ink-light mb-4">{selectedVocab.meaning}</p>
+            <div className="text-sm text-ink-muted">
               <span className="font-medium">Status:</span> {selectedVocab.status}
             </div>
           </div>
@@ -445,13 +475,13 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
       {/* Config Modal */}
       {showConfig && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-4">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/75 flex items-center justify-center z-50">
+          <div className="bg-paper rounded-lg shadow-xl max-w-md w-full mx-4 p-4 dark:border dark:border-paper-dark">
             <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-bold">Anki Settings</h3>
+              <h3 className="text-lg font-bold text-ink">Anki Settings</h3>
               <button
                 onClick={() => setShowConfig(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-ink-muted hover:text-ink"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"/>
@@ -461,21 +491,21 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink-light mb-1">
                 Anki Collection Path
               </label>
               <input
                 type="text"
                 value={ankiPath}
                 onChange={(e) => setAnkiPath(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm border border-paper-dark rounded-lg focus:outline-none focus:ring-2 focus:ring-vermillion bg-paper text-ink"
                 placeholder="~/Library/Application Support/Anki2/User 1/collection.anki2"
               />
               <div className="mt-1 text-xs">
                 {ankiPathExists ? (
-                  <span className="text-green-600">File found</span>
+                  <span className="text-jade">File found</span>
                 ) : (
-                  <span className="text-red-500">File not found</span>
+                  <span className="text-vermillion">File not found</span>
                 )}
               </div>
             </div>
@@ -489,21 +519,21 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
                     setTimeout(() => setSyncMessage(''), 2000);
                   }
                 }}
-                className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium"
+                className="flex-1 px-4 py-2 bg-paper-dark hover:bg-paper-warm rounded-lg text-sm font-medium text-ink"
               >
                 Save Path
               </button>
               <button
                 onClick={syncAnki}
                 disabled={isSyncing}
-                className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-vermillion hover:bg-vermillion-soft text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 {isSyncing ? 'Syncing...' : 'Sync Now'}
               </button>
             </div>
 
             {syncMessage && (
-              <div className="mt-3 text-sm text-center text-gray-600">
+              <div className="mt-3 text-sm text-center text-ink-muted">
                 {syncMessage}
               </div>
             )}
@@ -512,7 +542,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
       )}
 
       {/* Footer Stats */}
-      <div className="p-3 border-t border-gray-200 bg-gray-50 text-xs text-gray-500">
+      <div className="p-3 border-t border-paper-dark bg-paper-warm text-xs text-ink-muted">
         Total: {stats.total} words
       </div>
     </div>

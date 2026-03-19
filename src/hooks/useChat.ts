@@ -59,7 +59,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
 
     const loadHistory = async () => {
       try {
-        const response = await fetch(`/api/chat/history/${sessionId}`);
+        const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/chat/history/${sessionId}`);
         if (response.ok) {
           const history = await response.json();
           if (history.length > 0) {
@@ -118,7 +118,7 @@ export function useChat(sessionId: string | null): UseChatReturn {
         imageData = imageData.split('base64,')[1];
       }
 
-      const response = await fetch('/api/chat/stream', {
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

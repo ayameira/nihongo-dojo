@@ -14,6 +14,7 @@ interface ChatProps {
   onRefreshFacts?: () => Promise<void>;
   sessionId: string | null;
   selectedSpeakerId?: number;
+  onRefreshSessions?: () => Promise<void>;
 }
 
 const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => {
@@ -40,7 +41,7 @@ const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => 
   );
 };
 
-export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUpdateFact, onDeleteFact, onRefreshFacts, sessionId, selectedSpeakerId }) => {
+export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUpdateFact, onDeleteFact, onRefreshFacts, sessionId, selectedSpeakerId, onRefreshSessions }) => {
   const {
     messages,
     isLoading,
@@ -96,13 +97,30 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
     }
   }, [inputValue]);
 
-  // Refresh facts when chat response completes (AI may have updated them)
+  // Refresh data when chat response completes
   useEffect(() => {
-    if (wasLoadingRef.current && !isLoading && onRefreshFacts) {
-      onRefreshFacts();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    if (wasLoadingRef.current && !isLoading) {
+      // Refresh facts (AI may have updated them)
+      if (onRefreshFacts) {
+        onRefreshFacts();
+      }
+      // Refresh sessions to get preview and auto-generated title
+      if (onRefreshSessions) {
+        onRefreshSessions();
+        // Delayed refresh to catch the LLM-generated title (runs in background)
+        timer = setTimeout(() => {
+          onRefreshSessions();
+        }, 3000);
+      }
     }
     wasLoadingRef.current = isLoading;
-  }, [isLoading, onRefreshFacts]);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isLoading, onRefreshFacts, onRefreshSessions]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();

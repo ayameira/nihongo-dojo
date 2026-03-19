@@ -31,7 +31,7 @@ export function useSessions(): UseSessionsReturn {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const response = await fetch('/api/sessions');
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/sessions');
       if (response.ok) {
         const data = await response.json();
         setSessions(data);
@@ -77,7 +77,7 @@ export function useSessions(): UseSessionsReturn {
     const newId = generateSessionId();
 
     try {
-      const response = await fetch('/api/sessions', {
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: newId }),
@@ -105,7 +105,7 @@ export function useSessions(): UseSessionsReturn {
 
   const renameSession = useCallback(async (sessionId: string, name: string) => {
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/sessions/${sessionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -124,7 +124,7 @@ export function useSessions(): UseSessionsReturn {
 
   const deleteSession = useCallback(async (sessionId: string) => {
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/sessions/${sessionId}`, {
         method: 'DELETE',
       });
 

@@ -7,7 +7,7 @@ import logging
 
 from app.config import get_settings
 from app.db.database import init_db, close_db, get_session
-from app.api import chat, vocab, notes, telemetry, config, sessions, media
+from app.api import chat, vocab, notes, telemetry, config, sessions, media, grammar
 from app.services.anki_sync import export_anki_to_db
 from app.services.anki_importer import import_from_export_db
 
@@ -54,6 +54,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Anki sync failed: {e}")
 
+    # Seed grammar data on startup if table is empty
+    try:
+        from app.services.grammar_seeder import check_and_seed_grammar
+        async for session in get_session():
+            result = await check_and_seed_grammar(session)
+            if result.get("count", 0) > 0:
+                logger.info(f"Grammar seeded: {result['count']} entries")
+            break
+    except Exception as e:
+        logger.error(f"Grammar seed failed: {e}")
+
     yield
 
     # Shutdown
@@ -71,10 +82,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["*"],  # Allow all origins for the portfolio deployment
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,6 +96,7 @@ app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"]
 app.include_router(config.router, prefix="/api/config", tags=["config"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(media.router, prefix="/api/media", tags=["media"])
+app.include_router(grammar.router, prefix="/api/grammar", tags=["grammar"])
 
 
 @app.get("/api/health")

@@ -25,8 +25,37 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, speakerId }) => 
     setIsLoading(true);
     setError(null);
 
+    // Use Web Speech API fallback
+    if (speakerId === 0) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ja-JP';
+      // Fallback voice selection (find a Japanese voice if available)
+      const voices = window.speechSynthesis.getVoices();
+      const jaVoice = voices.find((v) => v.lang.startsWith('ja'));
+      if (jaVoice) {
+        utterance.voice = jaVoice;
+      }
+      utterance.onstart = () => {
+        setIsPlaying(true);
+        setIsLoading(false);
+      };
+      utterance.onend = () => {
+        setIsPlaying(false);
+      };
+      utterance.onerror = () => {
+        setError('TTS playback failed');
+        setIsPlaying(false);
+        setIsLoading(false);
+      };
+
+      // We must cancel any ongoing native speech before speaking
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+      return;
+    }
+
     try {
-      const response = await fetch('/api/media/tts', {
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/media/tts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
