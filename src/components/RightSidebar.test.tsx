@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RightSidebar } from './RightSidebar';
 
@@ -10,6 +10,10 @@ describe('RightSidebar', () => {
     isCollapsed: false,
     onToggle: vi.fn(),
     onBudgetClick: vi.fn(),
+    speakers: [],
+    selectedSpeakerId: 0,
+    onSpeakerChange: vi.fn(),
+    ttsError: null,
   };
 
   beforeEach(() => {
@@ -183,6 +187,7 @@ describe('RightSidebar', () => {
       render(<RightSidebar {...defaultProps} />);
 
       const initialQuote = document.querySelector('.quote-jp')?.textContent;
+      expect(initialQuote).toBeDefined(); // Use initialQuote to satisfy TS
 
       // Advance time by 30 seconds
       act(() => {
