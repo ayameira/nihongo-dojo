@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +20,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _seed_database_if_needed():
+    """Copy the pre-seeded nihongo_dojo.db from the repo into the runtime
+    location if no database file exists yet (e.g. first deploy on Render)."""
+    runtime_db = Path("nihongo_dojo.db")
+    # The pre-seeded DB lives next to the backend package inside the repo
+    seeded_db = Path(__file__).resolve().parent.parent / "nihongo_dojo.db"
+
+    if not runtime_db.exists() and seeded_db.exists():
+        shutil.copy2(seeded_db, runtime_db)
+        logger.info(f"Copied pre-seeded database from {seeded_db}")
+    elif runtime_db.exists():
+        logger.info("Runtime database already exists, skipping seed copy")
+    else:
+        logger.warning("No pre-seeded database found at %s", seeded_db)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -30,6 +47,9 @@ async def lifespan(app: FastAPI):
         logger.warning("GEMINI_API_KEY not set. Chat functionality will not work.")
     else:
         logger.info("Gemini API key configured")
+
+    # Seed the database from the pre-built snapshot if this is a fresh deploy
+    _seed_database_if_needed()
 
     # Initialize database
     await init_db()
