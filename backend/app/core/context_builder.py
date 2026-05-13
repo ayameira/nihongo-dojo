@@ -180,7 +180,9 @@ async def get_chat_history(session_id: str, limit: int = 15) -> List[Dict]:
                 select(ChatMessage)
                 .where(ChatMessage.session_id == session_id)
                 .where(ChatMessage.is_archived == False)  # Exclude archived messages
-                .order_by(ChatMessage.created_at.desc())
+                # User/assistant turns are committed together and can share the
+                # same timestamp, so use the autoincrementing id for stable turn order.
+                .order_by(ChatMessage.id.desc())
                 .limit(limit)
             )
             result = await session.execute(stmt)

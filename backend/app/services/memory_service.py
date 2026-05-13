@@ -145,7 +145,7 @@ class MemoryService:
                 select(ChatMessage)
                 .where(ChatMessage.session_id == session_id)
                 .where(ChatMessage.is_archived == False)
-                .order_by(ChatMessage.created_at.asc())
+                .order_by(ChatMessage.id.asc())
                 .limit(limit)
             )
             result = await session.execute(stmt)

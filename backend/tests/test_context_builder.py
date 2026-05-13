@@ -184,6 +184,57 @@ class TestGetChatHistory:
         assert result[0]["role"] == "user"
 
     @pytest.mark.asyncio
+    async def test_uses_id_order_when_timestamps_match(self, async_session, sample_session):
+        """Test stable turn order when messages are saved in the same second."""
+        from datetime import datetime
+        from app.db.models import ChatMessage
+
+        shared_time = datetime(2024, 1, 15, 10, 0, 0)
+        messages = [
+            ChatMessage(
+                session_id=sample_session.id,
+                role="user",
+                content="user 1",
+                created_at=shared_time,
+            ),
+            ChatMessage(
+                session_id=sample_session.id,
+                role="assistant",
+                content="assistant 1",
+                created_at=shared_time,
+            ),
+            ChatMessage(
+                session_id=sample_session.id,
+                role="user",
+                content="user 2",
+                created_at=shared_time,
+            ),
+            ChatMessage(
+                session_id=sample_session.id,
+                role="assistant",
+                content="assistant 2",
+                created_at=shared_time,
+            ),
+        ]
+        async_session.add_all(messages)
+        await async_session.commit()
+
+        mock_session_maker = MagicMock()
+        mock_session_maker.return_value.__aenter__ = AsyncMock(return_value=async_session)
+        mock_session_maker.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('app.db.database.async_session_maker', mock_session_maker):
+            result = await get_chat_history(sample_session.id, limit=4)
+
+        assert [msg["role"] for msg in result] == ["user", "model", "user", "model"]
+        assert [msg["parts"][0] for msg in result] == [
+            "user 1",
+            "assistant 1",
+            "user 2",
+            "assistant 2",
+        ]
+
+    @pytest.mark.asyncio
     async def test_maps_assistant_to_model(self, async_session, sample_session, sample_messages):
         """Test that 'assistant' role is mapped to 'model' for Gemini."""
         mock_session_maker = MagicMock()

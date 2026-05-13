@@ -7,6 +7,7 @@ import google.generativeai as genai
 
 from app.core.gemini_client import GeminiClient
 from app.config import Settings
+from app.core.tools import ALL_TOOLS
 
 
 class TestGeminiClientInit:
@@ -19,17 +20,19 @@ class TestGeminiClientInit:
                 client = GeminiClient(test_settings)
 
                 mock_configure.assert_called_once_with(api_key=test_settings.gemini_api_key)
-                mock_model.assert_called_once()
+                mock_model.assert_not_called()
+                assert client.settings == test_settings
+                assert len(client.tools) == len(ALL_TOOLS)
 
     def test_converts_tools_to_gemini_format(self, test_settings):
         """Test that tools are converted to Gemini format."""
         with patch('google.generativeai.configure'):
-            with patch('google.generativeai.GenerativeModel') as mock_model:
+            with patch('google.generativeai.GenerativeModel'):
                 client = GeminiClient(test_settings)
 
-                # Check that tools were passed to the model
-                call_kwargs = mock_model.call_args.kwargs
-                assert 'tools' in call_kwargs
+                tool_names = [t.name for t in client.tools]
+                expected_names = [tool["name"] for tool in ALL_TOOLS]
+                assert tool_names == expected_names
 
 
 class TestMapType:
@@ -86,8 +89,7 @@ class TestConvertTools:
             with patch('google.generativeai.GenerativeModel'):
                 client = GeminiClient(test_settings)
 
-                # We should have 1 tool (manage_student_facts)
-                assert len(client.tools) == 1
+                assert len(client.tools) == len(ALL_TOOLS)
 
     def test_tool_names_preserved(self, test_settings):
         """Test that tool names are preserved during conversion."""
@@ -97,10 +99,21 @@ class TestConvertTools:
 
                 tool_names = [t.name for t in client.tools]
                 assert "manage_student_facts" in tool_names
+                assert "manage_grammar" in tool_names
 
 
 class TestStreamChat:
     """Tests for stream_chat method."""
+
+    @staticmethod
+    def _mock_response(parts, usage_metadata=None):
+        mock_candidate = MagicMock()
+        mock_candidate.content.parts = parts
+
+        mock_response = MagicMock()
+        mock_response.candidates = [mock_candidate]
+        mock_response.usage_metadata = usage_metadata
+        return mock_response
 
     @pytest.mark.asyncio
     async def test_yields_text_chunks(self, test_settings):
@@ -112,15 +125,7 @@ class TestStreamChat:
                 mock_part.text = "Hello"
                 mock_part.function_call = None
 
-                mock_candidate = MagicMock()
-                mock_candidate.content.parts = [mock_part]
-
-                mock_chunk = MagicMock()
-                mock_chunk.candidates = [mock_candidate]
-
-                mock_response = MagicMock()
-                mock_response.__iter__ = lambda self: iter([mock_chunk])
-                mock_response._result = None
+                mock_response = self._mock_response([mock_part])
 
                 mock_chat = MagicMock()
                 mock_chat.send_message.return_value = mock_response
@@ -155,18 +160,15 @@ class TestStreamChat:
                 mock_part.text = None
                 mock_part.function_call = mock_fc
 
-                mock_candidate = MagicMock()
-                mock_candidate.content.parts = [mock_part]
+                mock_text_part = MagicMock()
+                mock_text_part.text = "Saved"
+                mock_text_part.function_call = None
 
-                mock_chunk = MagicMock()
-                mock_chunk.candidates = [mock_candidate]
-
-                mock_response = MagicMock()
-                mock_response.__iter__ = lambda self: iter([mock_chunk])
-                mock_response._result = None
+                mock_function_response = self._mock_response([mock_part])
+                mock_text_response = self._mock_response([mock_text_part])
 
                 mock_chat = MagicMock()
-                mock_chat.send_message.return_value = mock_response
+                mock_chat.send_message.side_effect = [mock_function_response, mock_text_response]
 
                 mock_model = MagicMock()
                 mock_model.start_chat.return_value = mock_chat
@@ -176,14 +178,19 @@ class TestStreamChat:
 
                 context = {"chat_history": []}
                 parts = ["Save this word"]
+                tool_executor = AsyncMock(return_value="Added fact")
 
                 chunks = []
-                async for chunk in client.stream_chat(context, parts):
+                async for chunk in client.stream_chat(context, parts, tool_executor=tool_executor):
                     chunks.append(chunk)
 
                 tool_calls = [c for c in chunks if c["type"] == "tool_call"]
                 assert len(tool_calls) > 0
                 assert tool_calls[0]["name"] == "manage_student_facts"
+                tool_executor.assert_called_once_with(
+                    "manage_student_facts",
+                    {"action": "add", "content": "test fact"},
+                )
 
     @pytest.mark.asyncio
     async def test_yields_error_on_exception(self, test_settings):
@@ -216,15 +223,7 @@ class TestStreamChat:
                 mock_part.text = "Response"
                 mock_part.function_call = None
 
-                mock_candidate = MagicMock()
-                mock_candidate.content.parts = [mock_part]
-
-                mock_chunk = MagicMock()
-                mock_chunk.candidates = [mock_candidate]
-
-                mock_response = MagicMock()
-                mock_response.__iter__ = lambda self: iter([mock_chunk])
-                mock_response._result = None
+                mock_response = self._mock_response([mock_part])
 
                 mock_chat = MagicMock()
                 mock_chat.send_message.return_value = mock_response
@@ -244,10 +243,13 @@ class TestStreamChat:
                 async for _ in client.stream_chat(context, parts):
                     pass
 
-                # Check that send_message was called with parts containing system prompt
+                # The system prompt should be sent via Gemini's system_instruction,
+                # not embedded in the user message parts.
+                model_kwargs = mock_model_class.call_args.kwargs
+                assert model_kwargs["system_instruction"] == "You are a Japanese tutor"
                 call_args = mock_chat.send_message.call_args
                 sent_parts = call_args[0][0]
-                assert any("System Instructions" in str(p) for p in sent_parts)
+                assert sent_parts == ["Hello"]
 
     @pytest.mark.asyncio
     async def test_extracts_usage_metadata(self, test_settings):
@@ -258,23 +260,12 @@ class TestStreamChat:
                 mock_part.text = "Response"
                 mock_part.function_call = None
 
-                mock_candidate = MagicMock()
-                mock_candidate.content.parts = [mock_part]
-
-                mock_chunk = MagicMock()
-                mock_chunk.candidates = [mock_candidate]
-
                 # Set up usage metadata
                 mock_usage = MagicMock()
                 mock_usage.prompt_token_count = 100
                 mock_usage.candidates_token_count = 50
 
-                mock_result = MagicMock()
-                mock_result.usage_metadata = mock_usage
-
-                mock_response = MagicMock()
-                mock_response.__iter__ = lambda self: iter([mock_chunk])
-                mock_response._result = mock_result
+                mock_response = self._mock_response([mock_part], mock_usage)
 
                 mock_chat = MagicMock()
                 mock_chat.send_message.return_value = mock_response

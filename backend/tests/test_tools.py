@@ -41,10 +41,11 @@ class TestToolDefinitions:
         assert "action" in params["required"]
 
     def test_all_tools_contains_manage_student_facts(self):
-        """Test ALL_TOOLS contains the student facts tool."""
-        assert len(ALL_TOOLS) == 1
+        """Test ALL_TOOLS contains the registered tools."""
+        assert len(ALL_TOOLS) == 2
         names = [t["name"] for t in ALL_TOOLS]
         assert "manage_student_facts" in names
+        assert "manage_grammar" in names
 
 
 class TestExecuteToolCall:
