@@ -7,6 +7,7 @@ src-tauri/target/
 
 # Data files (user-specific)
 *.db
+!backend/nihongo_dojo.db
 *.anki2
 temp_*.anki2
 

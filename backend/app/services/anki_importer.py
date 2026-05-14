@@ -4,15 +4,121 @@ import os
 import json
 import tempfile
 import re
-from typing import Dict, Any
+from datetime import datetime
+from typing import Dict, Any, List
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.db.models import VocabEntry
+from app.db.models import VocabEntry, AnkiDeckConfig
+from app.services.anki_introspect import read_deck_notes
 
 logger = logging.getLogger(__name__)
+
+
+async def import_deck_config(config: AnkiDeckConfig, session: AsyncSession) -> Dict[str, Any]:
+    """Import a single configured Anki deck source using its field mapping.
+
+    Vocab is deduplicated per deck source via (deck_config_id, anki_note_id), so
+    re-syncing updates existing rows instead of creating duplicates.
+    """
+    notes = read_deck_notes(config.collection_path, config.deck_name)
+
+    imported = 0
+    updated = 0
+    skipped = 0
+
+    for note in notes:
+        fields = note["fields"]
+
+        # Optional per-deck note filter (e.g. Object_Type == "Vocabulary").
+        if config.filter_field:
+            actual = strip_html(fields.get(config.filter_field, ""))
+            if actual != (config.filter_value or ""):
+                skipped += 1
+                continue
+
+        kanji = strip_html(fields.get(config.kanji_field, "")) if config.kanji_field else ""
+        kana = strip_html(fields.get(config.kana_field, "")) if config.kana_field else ""
+        meaning = strip_html(fields.get(config.meaning_field, "")) if config.meaning_field else ""
+        pos = strip_html(fields.get(config.pos_field, "")) if config.pos_field else None
+
+        # Kana-only word: the "kanji" field actually holds kana, so demote it.
+        if kanji and not has_kanji(kanji):
+            if not kana:
+                kana = kanji
+            kanji = ""
+        # No reading mapped but a kanji word exists -> fall back to the word.
+        if not kana and kanji:
+            kana = kanji
+
+        if not kana or "<" in kana or len(kana) > 50:
+            skipped += 1
+            continue
+
+        status = determine_status(note["c_type"], note["c_queue"], note["c_ivl"])
+        note_id = note["anki_note_id"]
+
+        stmt = select(VocabEntry).where(
+            VocabEntry.deck_config_id == config.id,
+            VocabEntry.anki_note_id == note_id,
+        )
+        existing = (await session.execute(stmt)).scalar_one_or_none()
+
+        if existing:
+            existing.kanji = kanji or None
+            existing.kana = kana
+            existing.meaning = meaning
+            existing.pos = pos or None
+            existing.status = status
+            existing.interval_days = note["c_ivl"]
+            updated += 1
+        else:
+            session.add(VocabEntry(
+                kanji=kanji or None,
+                kana=kana,
+                meaning=meaning,
+                pos=pos or None,
+                status=status,
+                source="anki",
+                anki_note_id=note_id,
+                deck_config_id=config.id,
+                interval_days=note["c_ivl"],
+            ))
+            imported += 1
+
+    config.last_synced_at = datetime.utcnow()
+    await session.commit()
+
+    return {
+        "imported": imported,
+        "updated": updated,
+        "skipped": skipped,
+        "total_processed": len(notes),
+    }
+
+
+async def sync_all_decks(session: AsyncSession) -> List[Dict[str, Any]]:
+    """Sync every enabled Anki deck source. Failures are reported per deck and
+    never abort the remaining decks."""
+    stmt = select(AnkiDeckConfig).where(AnkiDeckConfig.enabled.is_(True))
+    configs = (await session.execute(stmt)).scalars().all()
+
+    results: List[Dict[str, Any]] = []
+    for config in configs:
+        try:
+            result = await import_deck_config(config, session)
+            results.append({"deck_config_id": config.id, "name": config.name, **result})
+            logger.info(
+                f"Anki sync '{config.name}': {result['imported']} imported, "
+                f"{result['updated']} updated, {result['skipped']} skipped"
+            )
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Anki sync failed for '{config.name}': {e}")
+            results.append({"deck_config_id": config.id, "name": config.name, "error": str(e)})
+    return results
 
 
 async def import_from_export_db(

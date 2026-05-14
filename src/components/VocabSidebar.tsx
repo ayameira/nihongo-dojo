@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SessionList } from './SessionList';
+import { AnkiSetupWizard } from './AnkiSetupWizard';
 import type { Session } from '../hooks/useSessions';
 
 interface VocabEntry {
@@ -55,10 +56,6 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [selectedVocab, setSelectedVocab] = useState<VocabEntry | null>(null);
   const [showConfig, setShowConfig] = useState(false);
-  const [ankiPath, setAnkiPath] = useState('');
-  const [ankiPathExists, setAnkiPathExists] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
 
   const fetchStats = useCallback(async () => {
     try {
@@ -108,80 +105,21 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
     }
   }, []);
 
-  const fetchAnkiPath = useCallback(async () => {
-    try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/config/anki-path');
-      if (response.ok) {
-        const data = await response.json();
-        setAnkiPath(data.path);
-        setAnkiPathExists(data.exists);
-      }
-    } catch (error) {
-      console.error('Failed to fetch Anki path:', error);
-    }
-  }, []);
-
-  const saveAnkiPath = async (path: string) => {
-    try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/config/anki-path', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setAnkiPath(data.path);
-        setAnkiPathExists(data.exists);
-        return data;
-      }
-    } catch (error) {
-      console.error('Failed to save Anki path:', error);
-    }
-    return null;
-  };
-
-  const syncAnki = async () => {
-    setIsSyncing(true);
-    setSyncMessage('Syncing...');
-    try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/config/sync-anki', { method: 'POST' });
-      if (response.ok) {
-        const data = await response.json();
-        setSyncMessage(`Synced: ${data.imported} new, ${data.updated} updated`);
-        // Refresh vocab data
-        fetchStats();
-        fetchLearningVocab();
-        fetchMatureVocab();
-        fetchNewVocab();
-      } else {
-        const error = await response.json();
-        setSyncMessage(`Error: ${error.detail}`);
-      }
-    } catch (error) {
-      setSyncMessage('Sync failed');
-    } finally {
-      setIsSyncing(false);
-      setTimeout(() => setSyncMessage(''), 3000);
-    }
-  };
-
-  useEffect(() => {
+  const refreshVocab = useCallback(() => {
     fetchStats();
     fetchLearningVocab();
     fetchMatureVocab();
     fetchNewVocab();
-    fetchAnkiPath();
+  }, [fetchStats, fetchLearningVocab, fetchMatureVocab, fetchNewVocab]);
+
+  useEffect(() => {
+    refreshVocab();
 
     // Refresh periodically
-    const interval = setInterval(() => {
-      fetchStats();
-      fetchLearningVocab();
-      fetchMatureVocab();
-      fetchNewVocab();
-    }, 30000);
+    const interval = setInterval(refreshVocab, 30000);
 
     return () => clearInterval(interval);
-  }, [fetchStats, fetchLearningVocab, fetchMatureVocab, fetchNewVocab, fetchAnkiPath]);
+  }, [refreshVocab]);
 
   const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
@@ -473,72 +411,12 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
         </div>
       )}
 
-      {/* Config Modal */}
+      {/* Anki Setup Wizard */}
       {showConfig && (
-        <div className="fixed inset-0 bg-black/50 dark:bg-black/75 flex items-center justify-center z-50">
-          <div className="bg-paper rounded-lg shadow-xl max-w-md w-full mx-4 p-4 dark:border dark:border-paper-dark">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-bold text-ink">Anki Settings</h3>
-              <button
-                onClick={() => setShowConfig(false)}
-                className="text-ink-muted hover:text-ink"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-ink-light mb-1">
-                Anki Collection Path
-              </label>
-              <input
-                type="text"
-                value={ankiPath}
-                onChange={(e) => setAnkiPath(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-paper-dark rounded-lg focus:outline-none focus:ring-2 focus:ring-vermillion bg-paper text-ink"
-                placeholder="~/Library/Application Support/Anki2/User 1/collection.anki2"
-              />
-              <div className="mt-1 text-xs">
-                {ankiPathExists ? (
-                  <span className="text-jade">File found</span>
-                ) : (
-                  <span className="text-vermillion">File not found</span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={async () => {
-                  const result = await saveAnkiPath(ankiPath);
-                  if (result) {
-                    setSyncMessage('Path saved');
-                    setTimeout(() => setSyncMessage(''), 2000);
-                  }
-                }}
-                className="flex-1 px-4 py-2 bg-paper-dark hover:bg-paper-warm rounded-lg text-sm font-medium text-ink"
-              >
-                Save Path
-              </button>
-              <button
-                onClick={syncAnki}
-                disabled={isSyncing}
-                className="flex-1 px-4 py-2 bg-vermillion hover:bg-vermillion-soft text-white rounded-lg text-sm font-medium disabled:opacity-50"
-              >
-                {isSyncing ? 'Syncing...' : 'Sync Now'}
-              </button>
-            </div>
-
-            {syncMessage && (
-              <div className="mt-3 text-sm text-center text-ink-muted">
-                {syncMessage}
-              </div>
-            )}
-          </div>
-        </div>
+        <AnkiSetupWizard
+          onClose={() => setShowConfig(false)}
+          onSynced={refreshVocab}
+        />
       )}
 
       {/* Footer Stats */}

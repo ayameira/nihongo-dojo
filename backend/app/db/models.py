@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, Text, func
+from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, Text, ForeignKey, func
 from sqlalchemy.orm import DeclarativeBase
 from datetime import datetime
 
@@ -18,10 +18,38 @@ class VocabEntry(Base):
     status = Column(String(20), default="New")  # New, Learning, Mature
     source = Column(String(20), default="manual")  # anki, tutor, manual
     anki_note_id = Column(Integer, nullable=True)
+    # Which Anki deck source this entry was imported from (null for manual/tutor)
+    deck_config_id = Column(Integer, ForeignKey("anki_deck_configs.id"), nullable=True, index=True)
     interval_days = Column(Integer, default=0)
     times_seen = Column(Integer, default=0)
     times_correct = Column(Integer, default=0)
     last_seen_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class AnkiDeckConfig(Base):
+    """A configured Anki deck source: which collection, which deck, and how its
+    note fields map onto Nihongo Dojo's vocabulary fields."""
+    __tablename__ = "anki_deck_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)  # user-facing label
+    collection_path = Column(String(500), nullable=False)  # path to a collection.anki2
+    deck_name = Column(String(255), nullable=False)  # exact Anki deck name
+    enabled = Column(Boolean, default=True)
+
+    # Field mappings (Anki note field name -> Nihongo Dojo field)
+    kanji_field = Column(String(255), nullable=True)
+    kana_field = Column(String(255), nullable=False)
+    meaning_field = Column(String(255), nullable=False)
+    pos_field = Column(String(255), nullable=True)
+
+    # Optional note filter: only import notes where filter_field == filter_value
+    filter_field = Column(String(255), nullable=True)
+    filter_value = Column(String(255), nullable=True)
+
+    last_synced_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

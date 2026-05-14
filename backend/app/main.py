@@ -9,9 +9,8 @@ import logging
 from app.config import get_settings
 from app.core.llm_client import is_llm_configured
 from app.db.database import init_db, close_db, get_session
-from app.api import chat, vocab, notes, telemetry, config, sessions, media, grammar
-from app.services.anki_sync import export_anki_to_db
-from app.services.anki_importer import import_from_export_db
+from app.api import chat, vocab, notes, telemetry, config, sessions, media, grammar, anki
+from app.services.anki_importer import sync_all_decks
 
 # Configure logging
 logging.basicConfig(
@@ -61,17 +60,15 @@ async def lifespan(app: FastAPI):
     cache_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"TTS cache directory ready: {cache_dir}")
 
-    # Sync Anki data on startup
+    # Sync configured Anki deck sources on startup
     try:
-        logger.info("Syncing Anki collection...")
-        export_path = export_anki_to_db()
-        if export_path:
-            async for session in get_session():
-                result = await import_from_export_db(export_path, session)
-                logger.info(f"Anki sync complete: {result['imported']} imported, {result['updated']} updated")
-                break
-        else:
-            logger.warning("No Anki data to sync")
+        async for session in get_session():
+            results = await sync_all_decks(session)
+            if results:
+                logger.info(f"Anki sync complete for {len(results)} deck source(s)")
+            else:
+                logger.info("No Anki deck sources configured; skipping sync")
+            break
     except Exception as e:
         logger.error(f"Anki sync failed: {e}")
 
@@ -118,6 +115,7 @@ app.include_router(config.router, prefix="/api/config", tags=["config"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(media.router, prefix="/api/media", tags=["media"])
 app.include_router(grammar.router, prefix="/api/grammar", tags=["grammar"])
+app.include_router(anki.router, prefix="/api/anki", tags=["anki"])
 
 
 @app.get("/api/health")

@@ -59,12 +59,15 @@ cd backend
 
 **Services** (`backend/app/services/`):
 - `memory_service.py` - Background conversation compaction to manage context length
-- `anki_sync.py`, `anki_importer.py` - Anki collection sync on startup
+- `anki_introspect.py` - Read-only inspection of Anki collections (decks, note types, fields, suggested mappings) for the setup wizard
+- `anki_importer.py` - Config-driven import: `import_deck_config`/`sync_all_decks` import vocab per `AnkiDeckConfig` using its field mapping
+- `anki_sync.py` - Legacy hardcoded WaniKani export (still backing the old `/api/config/sync-anki` endpoint)
 - `tts_service.py` - VOICEVOX text-to-speech integration
 - `notes_service.py` - Student record file operations
 
 **Database Models** (`backend/app/db/models.py`):
-- `VocabEntry` - Vocabulary with Anki sync
+- `VocabEntry` - Vocabulary; `deck_config_id` links Anki-sourced entries to their `AnkiDeckConfig`
+- `AnkiDeckConfig` - A configured Anki deck source: collection path, deck name, field mapping, optional note filter
 - `ChatMessage` - Chat history with `is_archived` flag for compaction
 - `ChatSession` - Session metadata with `summary` for compacted history
 - `TokenLog` - Usage and cost tracking
@@ -90,5 +93,5 @@ Settings in `.env` (see `backend/app/config.py`):
 - Frontend proxies `/api/*` to backend via Vite config
 - Chat uses SSE with event types: `text`, `tool_call`, `tool_result`, `usage`, `done`, `error`
 - Student record is a markdown file updated via Gemini tool calls
-- Anki vocabulary syncs on startup from local collection
+- Anki vocabulary syncs on startup via `sync_all_decks` over all enabled `AnkiDeckConfig` rows; users add/map decks through the Anki setup wizard (`AnkiSetupWizard.tsx`, `/api/anki/*`)
 - Session sidebar state persisted to localStorage
