@@ -156,11 +156,11 @@ The `manage_grammar` tool allows the Listener agent to manage grammar:
 ```python
 MANAGE_GRAMMAR_TOOL = {
     "name": "manage_grammar",
-    "actions": ["add", "update_status", "add_notes"],
+    "actions": ["add", "start_learning", "update_status", "add_notes"],
     "parameters": {
-        "action": "add | update_status | add_notes",
-        "pattern": "Japanese pattern (for add)",
-        "meaning": "English meaning (for add)",
+        "action": "add | start_learning | update_status | add_notes",
+        "pattern": "Japanese pattern (for add/start_learning)",
+        "meaning": "English meaning (for add/custom start_learning)",
         "grammar_id": "ID for update_status/add_notes",
         "status": "New | Learning | Burned",
         "notes": "Study notes",
@@ -171,7 +171,11 @@ MANAGE_GRAMMAR_TOOL = {
 
 **Use cases:**
 - User says "add ている to my grammar list" → Listener calls `manage_grammar(action="add", pattern="ている", meaning="...")`
+- Tutor introduces a non-JLPT/custom point the student should practice → Listener calls `manage_grammar(action="start_learning", pattern="...", meaning="...")`; the tool creates a custom `Learning` point if no exact match exists
+- Tutor introduces an existing JLPT point → Listener calls `manage_grammar(action="start_learning", pattern="...", meaning="...")`; the tool marks the existing point `Learning`
 - User says "I've mastered から" → Listener calls `manage_grammar(action="update_status", grammar_id=X, status="Burned")`
+
+For `add` and `start_learning`, the tool normalizes common teaching notation before deciding whether a point is custom. For example, `〜より` can match the seeded `より` entry, and `Verb (stem) + にくい` can match `にくい`.
 
 ### Why Listener, Not Tutor?
 
@@ -181,7 +185,7 @@ The Tutor agent has `use_tools=False` (teaching-focused, no interruptions). The 
 1. User sends message to Tutor
 2. Tutor responds (streams to user)
 3. Listener runs in background, analyzes conversation
-4. If user requested grammar changes, Listener calls `manage_grammar` tool
+4. If the user requested grammar changes, or the exchange clearly introduced a concrete grammar point to practice, Listener calls `manage_grammar` tool
 
 The Listener's prompt includes the current learning grammar with IDs so it can reference them:
 ```

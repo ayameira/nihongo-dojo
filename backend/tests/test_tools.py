@@ -6,9 +6,12 @@ from unittest.mock import patch, AsyncMock, MagicMock
 
 from app.core.tools import (
     MANAGE_STUDENT_FACTS_TOOL,
+    MANAGE_GRAMMAR_TOOL,
     ALL_TOOLS,
     execute_tool_call,
     execute_manage_student_facts,
+    execute_manage_grammar,
+    normalize_grammar_pattern,
 )
 
 
@@ -39,6 +42,24 @@ class TestToolDefinitions:
 
         # Check required fields
         assert "action" in params["required"]
+
+    def test_manage_grammar_tool_schema(self):
+        """Test manage_grammar tool exposes grammar learning actions."""
+        assert MANAGE_GRAMMAR_TOOL["name"] == "manage_grammar"
+        assert "parameters" in MANAGE_GRAMMAR_TOOL
+
+        params = MANAGE_GRAMMAR_TOOL["parameters"]
+        action_prop = params["properties"]["action"]
+        assert "add" in action_prop["enum"]
+        assert "start_learning" in action_prop["enum"]
+        assert "update_status" in action_prop["enum"]
+        assert "add_notes" in action_prop["enum"]
+
+    def test_normalizes_grammar_teaching_notation(self):
+        """Test grammar pattern matching ignores common teaching notation."""
+        assert normalize_grammar_pattern("〜より") == "より"
+        assert normalize_grammar_pattern("Verb (stem) + にくい") == "にくい"
+        assert normalize_grammar_pattern("から 1") == "から1"
 
     def test_all_tools_contains_manage_student_facts(self):
         """Test ALL_TOOLS contains the registered tools."""
@@ -274,3 +295,127 @@ class TestExecuteManageStudentFacts:
 
         assert "Error" in result
         assert "fact_id" in result
+
+
+class TestExecuteManageGrammar:
+    """Tests for execute_manage_grammar function."""
+
+    @pytest.mark.asyncio
+    async def test_start_learning_creates_custom_point(self, async_engine):
+        """Test start_learning creates a custom Learning point when absent."""
+        from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+        from sqlalchemy import select
+        from app.db.models import GrammarEntry
+
+        session_maker = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+
+        with patch('app.db.database.async_session_maker', session_maker):
+            result = await execute_manage_grammar({
+                "action": "start_learning",
+                "pattern": "っぱなし",
+                "meaning": "leaving something in a state",
+                "notes": "Introduced after the student asked how to say leaving the light on.",
+            })
+
+        assert "Added custom learning grammar" in result
+
+        async with session_maker() as session:
+            stmt = select(GrammarEntry).where(GrammarEntry.pattern == "っぱなし")
+            entry = (await session.execute(stmt)).scalar_one()
+            assert entry.meaning == "leaving something in a state"
+            assert entry.jlpt_level is None
+            assert entry.source == "tutor"
+            assert entry.status == "Learning"
+            assert "leaving the light on" in entry.notes
+
+    @pytest.mark.asyncio
+    async def test_start_learning_promotes_existing_point(self, async_engine):
+        """Test start_learning marks an existing grammar point as Learning."""
+        from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+        from sqlalchemy import select
+        from app.db.models import GrammarEntry
+
+        session_maker = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+
+        async with session_maker() as session:
+            entry = GrammarEntry(
+                pattern="より",
+                meaning="than",
+                jlpt_level="N5",
+                source="jlpt",
+                status="New",
+            )
+            session.add(entry)
+            await session.commit()
+            await session.refresh(entry)
+            entry_id = entry.id
+
+        with patch('app.db.database.async_session_maker', session_maker):
+            result = await execute_manage_grammar({
+                "action": "start_learning",
+                "pattern": "より",
+                "meaning": "than",
+                "notes": "Practiced comparisons.",
+            })
+
+        assert f"[#{entry_id}]" in result
+        assert "New -> Learning" in result
+
+        async with session_maker() as session:
+            stmt = select(GrammarEntry).where(GrammarEntry.id == entry_id)
+            entry = (await session.execute(stmt)).scalar_one()
+            assert entry.status == "Learning"
+            assert entry.source == "jlpt"
+            assert entry.notes == "Practiced comparisons."
+
+    @pytest.mark.asyncio
+    async def test_start_learning_matches_teaching_notation(self, async_engine):
+        """Test start_learning does not create custom duplicates for JLPT points."""
+        from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+        from sqlalchemy import select
+        from app.db.models import GrammarEntry
+
+        session_maker = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+
+        async with session_maker() as session:
+            entry = GrammarEntry(
+                pattern="より",
+                meaning="than",
+                jlpt_level="N4",
+                source="jlpt",
+                status="New",
+            )
+            session.add(entry)
+            await session.commit()
+            await session.refresh(entry)
+            entry_id = entry.id
+
+        with patch('app.db.database.async_session_maker', session_maker):
+            result = await execute_manage_grammar({
+                "action": "start_learning",
+                "pattern": "〜より",
+                "meaning": "than",
+            })
+
+        assert f"[#{entry_id}]" in result
+
+        async with session_maker() as session:
+            all_entries = (await session.execute(select(GrammarEntry))).scalars().all()
+            assert len(all_entries) == 1
+            assert all_entries[0].status == "Learning"
+
+    @pytest.mark.asyncio
+    async def test_start_learning_requires_meaning_for_custom_point(self, async_engine):
+        """Test start_learning needs meaning when it would create a custom point."""
+        from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+        session_maker = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+
+        with patch('app.db.database.async_session_maker', session_maker):
+            result = await execute_manage_grammar({
+                "action": "start_learning",
+                "pattern": "っぱなし",
+            })
+
+        assert "Error" in result
+        assert "meaning" in result

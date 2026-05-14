@@ -1,7 +1,17 @@
-from typing import Any, Dict
 import logging
+import re
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_grammar_pattern(pattern: str) -> str:
+    """Normalize teaching notation so tool calls can match seeded JLPT entries."""
+    pattern = pattern.strip()
+    pattern = pattern.replace("＋", "+").replace("（", "(").replace("）", ")")
+    # Strip common explanatory notation while preserving Japanese text and digits
+    # used to disambiguate entries like "から 1" and "から 2".
+    return re.sub(r"[A-Za-z\s\(\)\+\[\]\{\}/,.;:：・〜~○〇…_-]+", "", pattern)
 
 # Tool definitions for Gemini
 MANAGE_STUDENT_FACTS_TOOL = {
@@ -30,22 +40,22 @@ MANAGE_STUDENT_FACTS_TOOL = {
 
 MANAGE_GRAMMAR_TOOL = {
     "name": "manage_grammar",
-    "description": "Manage grammar points in the student's learning list. Use this when the student asks to add or change a grammar point, or when you want to suggest a grammar point for them to study.",
+    "description": "Manage grammar points in the student's learning list. Use this when the student asks to add or change a grammar point, or when a tutoring exchange clearly introduces a concrete grammar point the student should now practice.",
     "parameters": {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["add", "update_status", "add_notes"],
-                "description": "add: Create a new grammar point. update_status: Change status of an existing grammar point. add_notes: Add study notes to a grammar point."
+                "enum": ["add", "start_learning", "update_status", "add_notes"],
+                "description": "add: Create a new custom grammar point. start_learning: Mark an existing grammar point as Learning by pattern, or create a custom Learning point if absent. update_status: Change status of an existing grammar point. add_notes: Add study notes to a grammar point."
             },
             "pattern": {
                 "type": "string",
-                "description": "The Japanese grammar pattern (e.g. 'ている', 'ければ'). Required for 'add'."
+                "description": "The Japanese grammar pattern (e.g. 'ている', 'ければ'). Required for 'add' and 'start_learning'."
             },
             "meaning": {
                 "type": "string",
-                "description": "English meaning/explanation. Required for 'add'."
+                "description": "English meaning/explanation. Required for 'add' and for 'start_learning' when creating a custom point."
             },
             "grammar_id": {
                 "type": "integer",
@@ -163,34 +173,101 @@ async def execute_manage_grammar(args: Dict[str, Any]) -> str:
     if not action:
         return "Error: 'action' is required"
 
+    def normalized_jlpt_level(value: Any) -> str | None:
+        if value in ["N5", "N4", "N3", "N2", "N1"]:
+            return value
+        return None
+
+    def merge_notes(existing_notes: str | None, new_notes: str) -> str:
+        if not existing_notes:
+            return new_notes
+        if new_notes in existing_notes:
+            return existing_notes
+        return f"{existing_notes}\n\n{new_notes}"
+
+    async def find_existing_grammar(pattern: str) -> GrammarEntry | None:
+        stmt = select(GrammarEntry).where(GrammarEntry.pattern == pattern)
+        exact = (await session.execute(stmt)).scalar_one_or_none()
+        if exact:
+            return exact
+
+        normalized = normalize_grammar_pattern(pattern)
+        if not normalized:
+            return None
+
+        stmt = select(GrammarEntry)
+        entries = (await session.execute(stmt)).scalars().all()
+        matches = [
+            entry for entry in entries
+            if normalize_grammar_pattern(entry.pattern) == normalized
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        return None
+
     async with async_session_maker() as session:
         if action == "add":
             pattern = args.get("pattern", "").strip()
             meaning = args.get("meaning", "").strip()
+            notes = args.get("notes", "").strip()
             if not pattern or not meaning:
                 return "Error: 'pattern' and 'meaning' are required for add"
 
-            # Check for duplicate
-            stmt = select(GrammarEntry).where(GrammarEntry.pattern == pattern)
-            existing = (await session.execute(stmt)).scalar_one_or_none()
+            # Check for duplicate, allowing for teaching notation like "〜より".
+            existing = await find_existing_grammar(pattern)
             if existing:
                 return f"Grammar point '{pattern}' already exists (ID: {existing.id}, status: {existing.status})"
 
-            jlpt_level = args.get("jlpt_level")
-            if jlpt_level and jlpt_level not in ["N5", "N4", "N3", "N2", "N1"]:
-                jlpt_level = None
+            jlpt_level = normalized_jlpt_level(args.get("jlpt_level"))
 
             entry = GrammarEntry(
                 pattern=pattern,
                 meaning=meaning,
                 jlpt_level=jlpt_level,
                 source="tutor",
+                notes=notes or None,
                 status="Learning",  # AI-added points start as Learning
             )
             session.add(entry)
             await session.commit()
             await session.refresh(entry)
             return f"Added grammar point [#{entry.id}]: {pattern} ({meaning})"
+
+        elif action == "start_learning":
+            pattern = args.get("pattern", "").strip()
+            meaning = args.get("meaning", "").strip()
+            notes = args.get("notes", "").strip()
+            if not pattern:
+                return "Error: 'pattern' is required for start_learning"
+
+            entry = await find_existing_grammar(pattern)
+
+            if entry:
+                old_status = entry.status
+                entry.status = "Learning"
+                if notes:
+                    entry.notes = merge_notes(entry.notes, notes)
+                await session.commit()
+                return (
+                    f"Started learning grammar [#{entry.id}] '{entry.pattern}': "
+                    f"{old_status} -> Learning"
+                )
+
+            if not meaning:
+                return "Error: 'meaning' is required when start_learning creates a custom point"
+
+            entry = GrammarEntry(
+                pattern=pattern,
+                meaning=meaning,
+                jlpt_level=normalized_jlpt_level(args.get("jlpt_level")),
+                source="tutor",
+                notes=notes or None,
+                status="Learning",
+            )
+            session.add(entry)
+            await session.commit()
+            await session.refresh(entry)
+            return f"Added custom learning grammar [#{entry.id}]: {pattern} ({meaning})"
 
         elif action == "update_status":
             grammar_id = args.get("grammar_id")
