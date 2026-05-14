@@ -3,6 +3,7 @@ Tests for OpenAI-compatible LLM providers such as Groq and OpenRouter.
 """
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from app.config import Settings
@@ -92,6 +93,20 @@ class TestOpenAICompatibleClient:
         assert result["tool_calls"][0]["result"] == "Added fact"
         assert result["usage"]["input_tokens"] == 50
         assert result["usage"]["output_tokens"] == 15
+        assert payloads[1]["messages"][-2] == {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "manage_student_facts",
+                        "arguments": '{"action": "add", "content": "likes tea"}',
+                    },
+                }
+            ],
+        }
         assert payloads[1]["messages"][-1] == {
             "role": "tool",
             "tool_call_id": "call_1",
@@ -116,3 +131,29 @@ class TestOpenAICompatibleClient:
         assert result["result"] == {"title": "Tea Chat"}
         assert result["usage"]["input_tokens"] == 10
         assert result["usage"]["output_tokens"] == 4
+
+    @pytest.mark.asyncio
+    async def test_post_completion_includes_error_response_body(self, groq_settings, monkeypatch):
+        client = OpenAICompatibleClient(groq_settings)
+
+        class FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def post(self, *args, **kwargs):
+                return httpx.Response(
+                    400,
+                    text='{"error":"content must be a string"}',
+                    request=httpx.Request("POST", client._chat_completions_url()),
+                )
+
+        monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
+
+        with pytest.raises(httpx.HTTPStatusError, match="content must be a string"):
+            await client._post_completion({"model": "test", "messages": []})

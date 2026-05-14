@@ -148,7 +148,19 @@ class OpenAICompatibleClient:
                 headers=self._headers(),
                 json=payload,
             )
-            response.raise_for_status()
+            if response.is_error:
+                detail = response.text.strip()
+                message = (
+                    f"OpenAI-compatible API returned {response.status_code} "
+                    f"{response.reason_phrase} for {response.request.url}"
+                )
+                if detail:
+                    message = f"{message}: {detail[:2000]}"
+                raise httpx.HTTPStatusError(
+                    message,
+                    request=response.request,
+                    response=response,
+                )
             return response.json()
 
     def _parse_tool_arguments(self, raw_args: str | Dict[str, Any] | None) -> Dict[str, Any]:
@@ -161,6 +173,18 @@ class OpenAICompatibleClient:
         except json.JSONDecodeError:
             logger.warning("Could not parse tool arguments as JSON: %s", raw_args)
             return {}
+
+    def _tool_call_assistant_message(
+        self,
+        message: Dict[str, Any],
+        tool_calls: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        content = message.get("content")
+        return {
+            "role": "assistant",
+            "content": "" if content is None else content,
+            "tool_calls": tool_calls,
+        }
 
     async def stream_chat(
         self,
@@ -272,11 +296,7 @@ class OpenAICompatibleClient:
             tool_calls = message.get("tool_calls") or []
 
             if tool_calls:
-                messages.append({
-                    "role": "assistant",
-                    "content": message.get("content"),
-                    "tool_calls": tool_calls,
-                })
+                messages.append(self._tool_call_assistant_message(message, tool_calls))
 
                 for call in tool_calls:
                     function = call.get("function", {})
@@ -338,11 +358,7 @@ class OpenAICompatibleClient:
             tool_calls = message.get("tool_calls") or []
 
             if tool_calls:
-                messages.append({
-                    "role": "assistant",
-                    "content": message.get("content"),
-                    "tool_calls": tool_calls,
-                })
+                messages.append(self._tool_call_assistant_message(message, tool_calls))
 
                 for call in tool_calls:
                     function = call.get("function", {})
