@@ -7,7 +7,7 @@ import asyncio
 import logging
 
 from app.db.database import get_session
-from app.config import get_settings
+from app.config import get_available_models, get_settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -74,6 +74,7 @@ class ChatRequest(BaseModel):
     image_data: Optional[str] = None
     session_id: str
     difficulty_feedback: Optional[str] = None  # 'too_hard' | 'too_easy'
+    model: Optional[str] = None
 
 
 async def generate_stream(request: ChatRequest, settings, background_tasks: BackgroundTasks):
@@ -101,6 +102,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
 
     try:
         client = GeminiClient(settings)
+        chat_model = request.model or settings.gemini_model
 
         # Build context for Tutor agent (no tool instructions)
         context = await build_tutor_context(request.session_id, request.difficulty_feedback)
@@ -123,6 +125,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             tool_executor=None,
             request_logger=log_payload,
             use_tools=False,  # Tutor agent has no tools
+            model_name=chat_model,
         ):
             if chunk["type"] == "text":
                 full_response += chunk["content"]
@@ -180,7 +183,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             if usage_data:
                 token_log = TokenLog(
                     session_id=request.session_id,
-                    model=settings.gemini_model,
+                    model=chat_model,
                     input_tokens=usage_data.get("input_tokens", 0),
                     output_tokens=usage_data.get("output_tokens", 0),
                     image_count=1 if request.image_data else 0,
@@ -227,7 +230,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             full_response=full_response,
             tool_calls=[],  # Tutor agent has no tools
             usage_data=usage_data,
-            model=settings.gemini_model,
+            model=chat_model,
         )
 
         # Send done event
@@ -248,7 +251,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             full_response=full_response if 'full_response' in dir() else "",
             tool_calls=[],  # Tutor agent has no tools
             usage_data=usage_data if 'usage_data' in dir() else None,
-            model=settings.gemini_model,
+            model=chat_model if 'chat_model' in dir() else settings.gemini_model,
             error=str(e),
         )
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
@@ -257,6 +260,9 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
 @router.post("/stream")
 async def stream_chat(request: ChatRequest, background_tasks: BackgroundTasks):
     settings = get_settings()
+    if request.model and request.model not in get_available_models():
+        raise HTTPException(status_code=400, detail="Unknown chat model")
+
     return StreamingResponse(
         generate_stream(request, settings, background_tasks),
         media_type="text/event-stream",

@@ -5,7 +5,7 @@ import base64
 import logging
 from datetime import datetime
 
-from app.config import Settings
+from app.config import Settings, get_model_pricing
 from app.core.tools import ALL_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -100,6 +100,7 @@ class GeminiClient:
         chat_history: List[Dict],
         current_parts: List[Any],
         iteration: int,
+        model_name: Optional[str] = None,
     ) -> Dict:
         """Build the complete payload for logging in Gemini REST API format."""
         # Build contents array: history + current message
@@ -132,7 +133,7 @@ class GeminiClient:
         }]
 
         return {
-            "model": self.settings.gemini_model,
+            "model": model_name or self.settings.gemini_model,
             "system_instruction": {"parts": [{"text": system_prompt}]} if system_prompt else None,
             "contents": contents,
             "tools": tools,
@@ -147,6 +148,7 @@ class GeminiClient:
         tool_executor: Optional[Callable] = None,
         request_logger: Optional[Callable] = None,
         use_tools: bool = True,
+        model_name: Optional[str] = None,
     ) -> AsyncGenerator[Dict, None]:
         """Stream a chat response from Gemini with optional tool loop support.
 
@@ -161,11 +163,12 @@ class GeminiClient:
             # Get system prompt and chat history from context
             system_prompt = context.get("system_prompt", "")
             chat_history = context.get("chat_history", [])
+            active_model = model_name or self.settings.gemini_model
 
             # Create model with system instruction (per-request since system prompt varies)
             # Only include tools if use_tools is True
             model = genai.GenerativeModel(
-                model_name=self.settings.gemini_model,
+                model_name=active_model,
                 tools=self.tools if use_tools else None,
                 system_instruction=system_prompt if system_prompt else None,
             )
@@ -203,6 +206,7 @@ class GeminiClient:
                         chat_history=current_history,
                         current_parts=parts,
                         iteration=iteration,
+                        model_name=active_model,
                     )
                     try:
                         await request_logger(payload)
@@ -284,9 +288,10 @@ class GeminiClient:
 
             # Calculate and yield usage
             if total_input_tokens > 0 or total_output_tokens > 0:
+                input_cost, output_cost = get_model_pricing(active_model, self.settings)
                 cost = (
-                    (total_input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
-                    (total_output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+                    (total_input_tokens * input_cost / 1_000_000) +
+                    (total_output_tokens * output_cost / 1_000_000)
                 )
                 yield {
                     "type": "usage",

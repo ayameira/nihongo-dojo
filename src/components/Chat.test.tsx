@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Chat } from './Chat';
 import { Fact } from '../hooks/useFacts';
@@ -7,7 +7,7 @@ import { Fact } from '../hooks/useFacts';
 // Mock useChat hook
 const mockUseChat = vi.fn();
 vi.mock('../hooks/useChat', () => ({
-  useChat: () => mockUseChat(),
+  useChat: (...args: unknown[]) => mockUseChat(...args),
 }));
 
 // Mock react-markdown
@@ -51,6 +51,7 @@ describe('Chat', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    global.fetch = vi.fn().mockResolvedValue({ ok: false });
     mockUseChat.mockReturnValue(defaultHookReturn);
   });
 
@@ -93,6 +94,75 @@ describe('Chat', () => {
       render(<Chat sessionId="test_session" />);
 
       expect(screen.getByText('Active')).toBeInTheDocument();
+    });
+
+    it('renders the configured chat model selector', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          current_model: 'gemini-3-flash-preview',
+          models: [
+            {
+              id: 'gemini-3-flash-preview',
+              name: 'Gemini 3 Flash Preview',
+              input_cost_per_1m: 0.5,
+              output_cost_per_1m: 3,
+            },
+            {
+              id: 'gemini-3-pro-preview',
+              name: 'Gemini 3 Pro Preview',
+              input_cost_per_1m: 2,
+              output_cost_per_1m: 12,
+            },
+          ],
+        }),
+      });
+
+      render(<Chat sessionId="test_session" />);
+
+      const selector = await screen.findByLabelText('Chat model');
+      expect(selector).toHaveValue('gemini-3-flash-preview');
+      expect(screen.getByText('Gemini 3 Pro Preview')).toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-flash-preview');
+      });
+    });
+
+    it('updates the selected chat model', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          current_model: 'gemini-3-flash-preview',
+          models: [
+            {
+              id: 'gemini-3-flash-preview',
+              name: 'Gemini 3 Flash Preview',
+              input_cost_per_1m: 0.5,
+              output_cost_per_1m: 3,
+            },
+            {
+              id: 'gemini-3-pro-preview',
+              name: 'Gemini 3 Pro Preview',
+              input_cost_per_1m: 2,
+              output_cost_per_1m: 12,
+            },
+          ],
+        }),
+      });
+      const user = userEvent.setup();
+
+      render(<Chat sessionId="test_session" />);
+
+      const selector = await screen.findByLabelText('Chat model');
+      await user.selectOptions(selector, 'gemini-3-pro-preview');
+
+      expect(selector).toHaveValue('gemini-3-pro-preview');
+      expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_chat_model', 'gemini-3-pro-preview');
+
+      await waitFor(() => {
+        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-pro-preview');
+      });
     });
   });
 

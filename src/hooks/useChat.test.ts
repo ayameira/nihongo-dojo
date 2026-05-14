@@ -6,6 +6,10 @@ import { createMockSSEResponse } from '../test/mocks';
 describe('useChat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
   });
 
   describe('initialization', () => {
@@ -182,6 +186,33 @@ describe('useChat', () => {
       if (streamCall) {
         const body = JSON.parse(streamCall[1].body);
         expect(body.difficulty_feedback).toBe('too_hard');
+      }
+    });
+
+    it('includes selected model in request', async () => {
+      const fetchSpy = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve([]),
+        })
+        .mockResolvedValueOnce(createMockSSEResponse([{ type: 'done' }]));
+
+      global.fetch = fetchSpy;
+
+      const { result } = renderHook(() => useChat('test_session', 'gemini-3-pro-preview'));
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Use the stronger model');
+      });
+
+      const streamCall = fetchSpy.mock.calls.find((call) => call[0] === '/api/chat/stream');
+      if (streamCall) {
+        const body = JSON.parse(streamCall[1].body);
+        expect(body.model).toBe('gemini-3-pro-preview');
       }
     });
 

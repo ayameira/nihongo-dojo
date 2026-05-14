@@ -17,6 +17,15 @@ interface ChatProps {
   onRefreshSessions?: () => Promise<void>;
 }
 
+interface ChatModel {
+  id: string;
+  name: string;
+  input_cost_per_1m: number;
+  output_cost_per_1m: number;
+}
+
+const MODEL_STORAGE_KEY = 'nihongo_chat_model';
+
 const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => {
   const getActionText = () => {
     switch (action.type) {
@@ -42,6 +51,10 @@ const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => 
 };
 
 export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUpdateFact, onDeleteFact, onRefreshFacts, sessionId, selectedSpeakerId, onRefreshSessions }) => {
+  const [availableModels, setAvailableModels] = useState<ChatModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || '');
+  const chatModel = availableModels.some(model => model.id === selectedModel) ? selectedModel : null;
+
   const {
     messages,
     isLoading,
@@ -52,7 +65,7 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
     sendMessage,
     sendDifficultyFeedback,
     clearPendingFeedback,
-  } = useChat(sessionId);
+  } = useChat(sessionId, chatModel);
 
   const [inputValue, setInputValue] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -71,6 +84,44 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoadingRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadModels = async () => {
+      try {
+        const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/config/models');
+        if (!response.ok) return;
+
+        const data: { current_model?: string; models?: ChatModel[] } = await response.json();
+        const models = Array.isArray(data.models) ? data.models : [];
+        if (cancelled) return;
+
+        setAvailableModels(models);
+        setSelectedModel(prev => {
+          const defaultModel = models.some(model => model.id === data.current_model)
+            ? data.current_model || ''
+            : models[0]?.id || '';
+          const candidate = prev || localStorage.getItem(MODEL_STORAGE_KEY) || defaultModel;
+          const nextModel = models.some(model => model.id === candidate) ? candidate : defaultModel;
+
+          if (nextModel) {
+            localStorage.setItem(MODEL_STORAGE_KEY, nextModel);
+          }
+
+          return nextModel;
+        });
+      } catch {
+        // The backend default still applies if the model list is unavailable.
+      }
+    };
+
+    loadModels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -130,6 +181,11 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
     setInputValue('');
     setSelectedImage(null);
     setIsAtBottom(true);
+  };
+
+  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedModel(e.target.value);
+    localStorage.setItem(MODEL_STORAGE_KEY, e.target.value);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -357,6 +413,25 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
         </div>
 
         <div className="header-right">
+          {availableModels.length > 0 && (
+            <label className="model-selector" title="Chat model">
+              <span className="model-selector-label">Model</span>
+              <select
+                aria-label="Chat model"
+                value={selectedModel}
+                onChange={handleModelChange}
+                className="model-select"
+                disabled={isLoading}
+              >
+                {availableModels.map(model => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           {pendingFeedback && (
             <span className="pending-feedback">
               {pendingFeedback === 'too_hard' ? 'Easier next time' : 'Harder next time'}

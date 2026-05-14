@@ -140,6 +140,42 @@ class TestStreamChat:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
+    async def test_accepts_model_override(self, test_client, test_settings):
+        """Test that the chat request accepts a model override."""
+        seen = {}
+
+        async def mock_generate_stream(request, *args, **kwargs):
+            seen["model"] = request.model
+            yield 'data: {"type": "done"}\n\n'
+
+        with patch('app.api.chat.generate_stream', mock_generate_stream):
+            response = await test_client.post(
+                "/api/chat/stream",
+                json={
+                    "message": "test",
+                    "session_id": "test_session",
+                    "model": "gemini-3-pro-preview",
+                }
+            )
+
+        assert response.status_code == 200
+        assert seen["model"] == "gemini-3-pro-preview"
+
+    @pytest.mark.asyncio
+    async def test_rejects_unknown_model_override(self, test_client, test_settings):
+        """Test that unknown model overrides are rejected before streaming."""
+        response = await test_client.post(
+            "/api/chat/stream",
+            json={
+                "message": "test",
+                "session_id": "test_session",
+                "model": "unknown-model",
+            }
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
     async def test_requires_session_id(self, test_client):
         """Test that session_id is required."""
         response = await test_client.post(

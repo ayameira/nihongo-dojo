@@ -3,6 +3,7 @@ import os
 import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from app.config import get_available_models, get_settings
 
 router = APIRouter()
 
@@ -26,6 +27,26 @@ def save_config(config: dict):
 
 class AnkiPathUpdate(BaseModel):
     path: str
+
+
+@router.get("/models")
+async def get_models():
+    """Get available chat models and the configured default."""
+    settings = get_settings()
+    models = [
+        {
+            "id": model_id,
+            "name": model_config["name"],
+            "input_cost_per_1m": model_config["input_cost_per_1m"],
+            "output_cost_per_1m": model_config["output_cost_per_1m"],
+        }
+        for model_id, model_config in get_available_models().items()
+    ]
+
+    return {
+        "current_model": settings.gemini_model,
+        "models": models,
+    }
 
 
 @router.get("/anki-path")

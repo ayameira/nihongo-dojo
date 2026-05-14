@@ -87,3 +87,25 @@ def get_settings() -> Settings:
 def get_available_models() -> Dict[str, Dict[str, Any]]:
     """Return all available models with their pricing."""
     return GEMINI_MODELS
+
+
+def get_model_pricing(model_name: str, settings: Settings | None = None) -> tuple[float, float]:
+    """Return input/output costs for a model.
+
+    Per-request chat model switches should use the registry pricing without
+    mutating the global settings object that background agents rely on.
+    """
+    if settings and model_name == settings.gemini_model:
+        return (
+            settings.gemini_input_cost_per_1m or 0.50,
+            settings.gemini_output_cost_per_1m or 3.00,
+        )
+
+    model_config = GEMINI_MODELS.get(model_name)
+    if model_config:
+        return (
+            model_config["input_cost_per_1m"],
+            model_config["output_cost_per_1m"],
+        )
+
+    return 0.50, 3.00
