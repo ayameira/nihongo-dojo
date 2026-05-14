@@ -29,6 +29,7 @@ def event_loop():
 def test_settings() -> Settings:
     """Create test settings with mocked values."""
     return Settings(
+        _env_file=None,
         database_url="sqlite+aiosqlite:///:memory:",
         gemini_api_key="test-api-key",
         gemini_model="gemini-2.0-flash",

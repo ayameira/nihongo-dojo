@@ -13,6 +13,7 @@ class TestConfigModels:
     @pytest.mark.asyncio
     async def test_returns_available_chat_models(self, test_client):
         settings = Settings(
+            _env_file=None,
             database_url="sqlite+aiosqlite:///:memory:",
             gemini_api_key="test-api-key",
             gemini_model="gemini-3-pro-preview",
@@ -38,6 +39,7 @@ class TestConfigModels:
     @pytest.mark.asyncio
     async def test_returns_groq_models_for_groq_provider(self, test_client):
         settings = Settings(
+            _env_file=None,
             database_url="sqlite+aiosqlite:///:memory:",
             llm_provider="groq",
             llm_api_key="test-groq-key",

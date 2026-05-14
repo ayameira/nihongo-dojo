@@ -212,7 +212,7 @@ export const CostDashboard: React.FC<CostDashboardProps> = ({ isOpen, onClose })
 
         {/* Footer */}
         <div className="p-4 border-t border-paper-dark bg-paper-warm text-xs text-ink-muted">
-          Pricing: $0.075/1M input tokens, $0.30/1M output tokens (Gemini Flash)
+          Cost estimates use the configured model registry and may differ from provider invoices.
         </div>
       </div>
     </div>

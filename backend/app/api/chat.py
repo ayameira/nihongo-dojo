@@ -280,8 +280,11 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
 
 
 @router.post("/stream")
-async def stream_chat(request: ChatRequest, background_tasks: BackgroundTasks):
-    settings = get_settings()
+async def stream_chat(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+    settings=Depends(get_settings),
+):
     provider = request.provider or settings.llm_provider
     available_models = get_available_models(provider)
     if (

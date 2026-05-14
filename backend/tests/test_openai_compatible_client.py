@@ -12,6 +12,7 @@ from app.core.openai_compatible_client import OpenAICompatibleClient
 @pytest.fixture
 def groq_settings() -> Settings:
     return Settings(
+        _env_file=None,
         database_url="sqlite+aiosqlite:///:memory:",
         llm_provider="groq",
         llm_api_key="test-groq-key",

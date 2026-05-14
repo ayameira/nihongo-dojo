@@ -83,14 +83,18 @@ class TestStreamChat:
     @pytest.mark.asyncio
     async def test_returns_error_without_api_key(self, test_client):
         """Test that error is returned when API key is not configured."""
-        from app.config import Settings
+        from app.config import Settings, get_settings
+        from app.main import app
 
         settings_no_key = Settings(
+            _env_file=None,
             database_url="sqlite+aiosqlite:///:memory:",
             gemini_api_key="",  # No API key
         )
 
-        with patch('app.api.chat.get_settings', return_value=settings_no_key):
+        previous_override = app.dependency_overrides.get(get_settings)
+        app.dependency_overrides[get_settings] = lambda: settings_no_key
+        try:
             response = await test_client.post(
                 "/api/chat/stream",
                 json={
@@ -98,6 +102,11 @@ class TestStreamChat:
                     "session_id": "test_session",
                 }
             )
+        finally:
+            if previous_override is None:
+                app.dependency_overrides.pop(get_settings, None)
+            else:
+                app.dependency_overrides[get_settings] = previous_override
 
         assert response.status_code == 200  # SSE always returns 200
         content = response.text
