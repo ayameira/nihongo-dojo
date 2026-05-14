@@ -40,7 +40,3 @@ logs/
 
 # TTS Audio Cache
 audio_cache/
-
-# Xcode user data
-*.xcuserstate
-xcuserdata/

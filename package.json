@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:voicevox\"",
     "dev:voicevox": "open -a VOICEVOX",
     "dev:frontend": "vite",
-    "dev:backend": "cd backend && ./venv/bin/uvicorn app.main:app --reload --port 8000 --host 0.0.0.0",
+    "dev:backend": "cd backend && ./venv/bin/uvicorn app.main:app --reload --port 8000",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",

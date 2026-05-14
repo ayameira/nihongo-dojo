@@ -36,27 +36,6 @@ cd backend
 
 ## Architecture
 
-### iOS App (Swift + SwiftUI)
-
-Native iOS app in `ios/NihongoDojo/` that connects to the backend via Tailscale for remote access.
-
-**Structure:**
-- `Models/` - Data models (Message, Session, Speaker, SSEEvent)
-- `Services/` - API layer (APIClient, ChatService, SessionService, TTSService)
-- `ViewModels/` - State management (ChatViewModel, SessionsViewModel)
-- `Views/` - UI components (ChatView, MessageBubble, SessionListView, SettingsView)
-
-**Features:**
-- Real-time SSE streaming chat
-- Session management
-- TTS playback via VOICEVOX
-- Configurable backend URL
-
-**Building:**
-1. Open `ios/NihongoDojo/NihongoDojo.xcodeproj` in Xcode
-2. Select your iPhone as target
-3. Cmd+R to build and run
-
 ### Frontend (React + TypeScript + Tailwind)
 
 - `src/App.tsx` - Main layout with resizable sidebars, session management, TTS voice selection
@@ -113,16 +92,3 @@ Settings in `.env` (see `backend/app/config.py`):
 - Student record is a markdown file updated via Gemini tool calls
 - Anki vocabulary syncs on startup from local collection
 - Session sidebar state persisted to localStorage
-
-## Remote Access (Tailscale)
-
-The app can be accessed from mobile devices via Tailscale VPN:
-
-1. Install Tailscale on Mac and iPhone
-2. Both devices get IPs like `100.x.x.x`
-3. Backend binds to `0.0.0.0:8000` (configured in package.json)
-4. Vite binds to all interfaces with `host: true`
-5. iOS app connects to Mac's Tailscale IP
-
-**Access from phone browser:** `http://<tailscale-ip>:5173`
-**iOS app backend URL:** `http://<tailscale-ip>:8000`
