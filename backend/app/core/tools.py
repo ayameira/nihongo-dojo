@@ -13,7 +13,7 @@ def normalize_grammar_pattern(pattern: str) -> str:
     # used to disambiguate entries like "から 1" and "から 2".
     return re.sub(r"[A-Za-z\s\(\)\+\[\]\{\}/,.;:：・〜~○〇…_-]+", "", pattern)
 
-# Tool definitions for Gemini
+# Provider-neutral tool definitions.
 MANAGE_STUDENT_FACTS_TOOL = {
     "name": "manage_student_facts",
     "description": "Manage long-term facts about the student. Use this to remember important information that helps you be a better tutor: their goals, interests, background, learning preferences, personal details, or progress observations. Facts are stored permanently across sessions.",

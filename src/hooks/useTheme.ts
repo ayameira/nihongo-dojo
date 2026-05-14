@@ -14,6 +14,7 @@ const STORAGE_KEY = 'nihongo_theme_preference';
 
 function getSystemTheme(): ResolvedTheme {
   if (typeof window === 'undefined') return 'light';
+  if (typeof window.matchMedia !== 'function') return 'light';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
@@ -61,6 +62,7 @@ export function useTheme(): UseThemeReturn {
   // Listen for system preference changes
   useEffect(() => {
     if (theme !== 'system') return;
+    if (typeof window.matchMedia !== 'function') return;
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 

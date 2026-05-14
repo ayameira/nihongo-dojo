@@ -14,14 +14,14 @@ from sqlalchemy import select, func, update
 
 from app.db.database import async_session_maker
 from app.db.models import ChatMessage, ChatSession, StudentFact
-from app.config import get_settings, Settings
-from app.core.gemini_client import GeminiClient
+from app.config import get_settings, Settings, resolve_provider_settings
+from app.core.llm_client import get_llm_client, is_llm_configured
 
 logger = logging.getLogger(__name__)
 
 
 class CompactionResult(BaseModel):
-    """Pydantic model for compaction output from Gemini."""
+    """Pydantic model for compaction output from the configured LLM."""
 
     new_summary: str
     new_student_facts: Optional[str] = None
@@ -67,6 +67,13 @@ class MemoryService:
     def __init__(self, settings: Optional[Settings] = None):
         self.settings = settings or get_settings()
 
+    def with_provider(
+        self,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> "MemoryService":
+        return MemoryService(resolve_provider_settings(self.settings, provider, model))
+
     async def get_active_message_count(self, session_id: str) -> int:
         """Get the count of non-archived messages for a session."""
         async with async_session_maker() as session:
@@ -105,8 +112,8 @@ class MemoryService:
             # Step 3: Format messages for prompt
             messages_chunk = self._format_messages_for_prompt(messages)
 
-            # Step 4: Call Gemini for compaction
-            compaction_result = await self._call_gemini_for_compaction(
+            # Step 4: Call the configured LLM for compaction
+            compaction_result = await self._call_llm_for_compaction(
                 current_summary, messages_chunk
             )
 
@@ -171,11 +178,14 @@ class MemoryService:
             lines.append(f"[{role_label}]: {content}")
         return "\n\n".join(lines)
 
-    async def _call_gemini_for_compaction(
+    async def _call_llm_for_compaction(
         self, current_summary: str, messages_chunk: str
     ) -> CompactionResult:
-        """Call Gemini to generate compaction result."""
-        client = GeminiClient(self.settings)
+        """Call the configured LLM to generate compaction result."""
+        if not is_llm_configured(self.settings):
+            raise RuntimeError("LLM is not configured")
+
+        client = get_llm_client(self.settings)
 
         prompt = COMPACTION_PROMPT_TEMPLATE.format(
             current_summary=current_summary
@@ -241,13 +251,17 @@ class MemoryService:
             await session.commit()
 
 
-async def run_compaction_if_needed(session_id: str) -> Optional[Dict]:
+async def run_compaction_if_needed(
+    session_id: str,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Optional[Dict]:
     """
     Check if compaction is needed and run it if so.
 
     This is the main entry point for background task integration.
     """
-    service = MemoryService()
+    service = MemoryService().with_provider(provider, model)
 
     if await service.should_compact(session_id):
         return await service.run_compaction(session_id)

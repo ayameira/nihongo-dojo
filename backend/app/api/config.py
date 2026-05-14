@@ -3,7 +3,12 @@ import os
 import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.config import get_available_models, get_settings
+from app.config import (
+    MODEL_REGISTRY,
+    get_provider_default_model,
+    get_settings,
+)
+from app.core.llm_client import is_llm_configured
 
 router = APIRouter()
 
@@ -33,18 +38,35 @@ class AnkiPathUpdate(BaseModel):
 async def get_models():
     """Get available chat models and the configured default."""
     settings = get_settings()
-    models = [
-        {
-            "id": model_id,
-            "name": model_config["name"],
-            "input_cost_per_1m": model_config["input_cost_per_1m"],
-            "output_cost_per_1m": model_config["output_cost_per_1m"],
-        }
-        for model_id, model_config in get_available_models().items()
-    ]
+    models = []
+
+    for provider, provider_models in MODEL_REGISTRY.items():
+        configured = is_llm_configured(settings, provider)
+        for model_id, model_config in provider_models.items():
+            models.append({
+                "id": model_id,
+                "provider": provider,
+                "key": f"{provider}:{model_id}",
+                "name": model_config["name"],
+                "provider_name": provider.title(),
+                "configured": configured,
+                "input_cost_per_1m": model_config["input_cost_per_1m"],
+                "output_cost_per_1m": model_config["output_cost_per_1m"],
+            })
 
     return {
-        "current_model": settings.gemini_model,
+        "provider": settings.llm_provider,
+        "current_model": settings.llm_model,
+        "current_key": f"{settings.llm_provider}:{settings.llm_model}",
+        "providers": [
+            {
+                "id": provider,
+                "name": provider.title(),
+                "configured": is_llm_configured(settings, provider),
+                "current_model": get_provider_default_model(settings, provider),
+            }
+            for provider in MODEL_REGISTRY
+        ],
         "models": models,
     }
 

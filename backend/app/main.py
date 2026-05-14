@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.config import get_settings
+from app.core.llm_client import is_llm_configured
 from app.db.database import init_db, close_db, get_session
 from app.api import chat, vocab, notes, telemetry, config, sessions, media, grammar
 from app.services.anki_sync import export_anki_to_db
@@ -42,11 +43,11 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Nihongo Dojo API...")
     settings = get_settings()
 
-    # Verify Gemini API key
-    if not settings.gemini_api_key:
-        logger.warning("GEMINI_API_KEY not set. Chat functionality will not work.")
+    # Verify LLM configuration
+    if not is_llm_configured(settings):
+        logger.warning("LLM is not configured. Chat functionality will not work.")
     else:
-        logger.info("Gemini API key configured")
+        logger.info(f"LLM configured: {settings.llm_provider} / {settings.llm_model}")
 
     # Seed the database from the pre-built snapshot if this is a fresh deploy
     _seed_database_if_needed()
@@ -94,7 +95,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Nihongo Dojo API",
-    description="Japanese language learning tutor with Gemini AI",
+    description="Japanese language learning tutor with pluggable LLM providers",
     version="0.2.0",
     lifespan=lifespan
 )

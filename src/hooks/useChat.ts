@@ -34,7 +34,11 @@ interface UseChatReturn {
   clearPendingFeedback: () => void;
 }
 
-export function useChat(sessionId: string | null, model?: string | null): UseChatReturn {
+export function useChat(
+  sessionId: string | null,
+  model?: string | null,
+  provider?: string | null,
+): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingState, setLoadingState] = useState<'idle' | 'connecting' | 'streaming'>('idle');
@@ -129,6 +133,7 @@ export function useChat(sessionId: string | null, model?: string | null): UseCha
           session_id: sessionId,
           difficulty_feedback: pendingFeedback,
           model: model || undefined,
+          provider: provider || undefined,
         }),
       });
 
@@ -222,7 +227,7 @@ export function useChat(sessionId: string | null, model?: string | null): UseCha
       setLoadingState('idle');
       setCurrentAction(null);
     }
-  }, [isLoading, model, pendingFeedback, sessionId]);
+  }, [isLoading, model, pendingFeedback, provider, sessionId]);
 
   const sendDifficultyFeedback = useCallback((direction: 'too_hard' | 'too_easy') => {
     setPendingFeedback(direction);

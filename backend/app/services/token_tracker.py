@@ -21,8 +21,8 @@ async def log_token_usage(
     cost_usd = 0.0
     if settings:
         cost_usd = (
-            (input_tokens * settings.gemini_input_cost_per_1m / 1_000_000) +
-            (output_tokens * settings.gemini_output_cost_per_1m / 1_000_000)
+            (input_tokens * settings.llm_input_cost_per_1m / 1_000_000) +
+            (output_tokens * settings.llm_output_cost_per_1m / 1_000_000)
         )
 
     log = TokenLog(

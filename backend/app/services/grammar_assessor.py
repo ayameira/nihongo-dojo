@@ -15,7 +15,7 @@ from sqlalchemy import select, update, and_
 
 from app.db.database import async_session_maker
 from app.db.models import GrammarEntry, ChatMessage
-from app.config import get_settings, Settings
+from app.config import get_settings, Settings, resolve_provider_settings
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,13 @@ class GrammarAssessor:
 
     def __init__(self, settings: Optional[Settings] = None):
         self.settings = settings or get_settings()
+
+    def with_provider(
+        self,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> "GrammarAssessor":
+        return GrammarAssessor(resolve_provider_settings(self.settings, provider, model))
 
     async def run_assessment(self) -> Dict:
         """Main entry point. Assess all eligible grammar points."""
@@ -202,7 +209,7 @@ class GrammarAssessor:
 
     async def _assess_batch(self, batch: List[Dict]) -> List[Dict]:
         """Send a batch of grammar points with their relevant messages to AI."""
-        from app.core.gemini_client import GeminiClient
+        from app.core.llm_client import get_llm_client, is_llm_configured
 
         # Format grammar points
         grammar_text = "\n".join(
@@ -225,7 +232,11 @@ class GrammarAssessor:
         )
 
         try:
-            client = GeminiClient(self.settings)
+            if not is_llm_configured(self.settings):
+                logger.warning("Grammar assessment skipped because LLM is not configured")
+                return []
+
+            client = get_llm_client(self.settings)
             response = await client.generate_json(prompt)
             result = response.get("result", {})
             return result.get("assessments", [])
@@ -291,10 +302,13 @@ class GrammarAssessor:
             await session.commit()
 
 
-async def run_grammar_assessment() -> Optional[Dict]:
+async def run_grammar_assessment(
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Optional[Dict]:
     """Entry point for background task integration."""
     try:
-        assessor = GrammarAssessor()
+        assessor = GrammarAssessor().with_provider(provider, model)
         return await assessor.run_assessment()
     except Exception as e:
         logger.error(f"Grammar assessment failed: {e}")

@@ -121,11 +121,11 @@ describe('Chat', () => {
       render(<Chat sessionId="test_session" />);
 
       const selector = await screen.findByLabelText('Chat model');
-      expect(selector).toHaveValue('gemini-3-flash-preview');
+      expect(selector).toHaveValue('gemini:gemini-3-flash-preview');
       expect(screen.getByText('Gemini 3 Pro Preview')).toBeInTheDocument();
 
       await waitFor(() => {
-        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-flash-preview');
+        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-flash-preview', 'gemini');
       });
     });
 
@@ -155,13 +155,13 @@ describe('Chat', () => {
       render(<Chat sessionId="test_session" />);
 
       const selector = await screen.findByLabelText('Chat model');
-      await user.selectOptions(selector, 'gemini-3-pro-preview');
+      await user.selectOptions(selector, 'gemini:gemini-3-pro-preview');
 
-      expect(selector).toHaveValue('gemini-3-pro-preview');
-      expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_chat_model', 'gemini-3-pro-preview');
+      expect(selector).toHaveValue('gemini:gemini-3-pro-preview');
+      expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_chat_model', 'gemini:gemini-3-pro-preview');
 
       await waitFor(() => {
-        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-pro-preview');
+        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-pro-preview', 'gemini');
       });
     });
   });

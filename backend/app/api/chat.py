@@ -7,30 +7,37 @@ import asyncio
 import logging
 
 from app.db.database import get_session
-from app.config import get_available_models, get_settings
+from app.config import get_available_models, get_settings, resolve_provider_settings
+from app.core.llm_client import get_llm_client, is_llm_configured, missing_llm_message
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def generate_session_title(session_id: str, first_message: str):
+async def generate_session_title(
+    session_id: str,
+    first_message: str,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+):
     """Generate a short title for the chat session based on the first message.
 
     Runs as a background task after the first message in a session.
     """
     from app.db.database import async_session_maker
     from app.db.models import ChatSession
-    from app.core.gemini_client import GeminiClient
     from sqlalchemy import select
 
     settings = get_settings()
 
-    if not settings.gemini_api_key:
-        logger.warning("No Gemini API key, skipping title generation")
+    title_settings = resolve_provider_settings(settings, provider, model)
+
+    if not is_llm_configured(title_settings):
+        logger.warning("No LLM API key, skipping title generation")
         return
 
     try:
-        client = GeminiClient(settings)
+        client = get_llm_client(title_settings)
 
         # Truncate message for prompt efficiency
         message_preview = first_message[:500] if len(first_message) > 500 else first_message
@@ -75,11 +82,11 @@ class ChatRequest(BaseModel):
     session_id: str
     difficulty_feedback: Optional[str] = None  # 'too_hard' | 'too_easy'
     model: Optional[str] = None
+    provider: Optional[str] = None
 
 
 async def generate_stream(request: ChatRequest, settings, background_tasks: BackgroundTasks):
     """Generate SSE stream for chat response."""
-    from app.core.gemini_client import GeminiClient
     from app.core.context_builder import build_tutor_context
     from app.db.database import async_session_maker
     from app.db.models import ChatMessage, TokenLog, ChatSession
@@ -90,19 +97,21 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
     from sqlalchemy import select
 
     request_logger = RequestLogger(settings.ai_logs_path)
+    chat_settings = resolve_provider_settings(settings, request.provider, request.model)
 
-    if not settings.gemini_api_key:
+    if not is_llm_configured(chat_settings):
+        error_message = missing_llm_message(chat_settings)
         await request_logger.log_error(
             session_id=request.session_id,
             user_message=request.message,
-            error="Gemini API key not configured",
+            error=error_message,
         )
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Gemini API key not configured'})}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'content': error_message})}\n\n"
         return
 
     try:
-        client = GeminiClient(settings)
-        chat_model = request.model or settings.gemini_model
+        client = get_llm_client(chat_settings)
+        chat_model = chat_settings.llm_model
 
         # Build context for Tutor agent (no tool instructions)
         context = await build_tutor_context(request.session_id, request.difficulty_feedback)
@@ -199,14 +208,25 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
                 request.session_id,
                 request.message,  # user message
                 full_response,    # tutor's response (for pronoun resolution)
+                chat_settings.llm_provider,
+                chat_model,
             )
 
             # Schedule memory compaction check as background task (non-blocking)
-            background_tasks.add_task(run_compaction_if_needed, request.session_id)
+            background_tasks.add_task(
+                run_compaction_if_needed,
+                request.session_id,
+                chat_settings.llm_provider,
+                chat_model,
+            )
 
             # Schedule grammar assessment every 20 messages
             if chat_session.message_count % 20 == 0:
-                background_tasks.add_task(run_grammar_assessment)
+                background_tasks.add_task(
+                    run_grammar_assessment,
+                    chat_settings.llm_provider,
+                    chat_model,
+                )
 
             # Generate title for new sessions
             if is_first_message:
@@ -214,6 +234,8 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
                     generate_session_title,
                     request.session_id,
                     request.message,
+                    chat_settings.llm_provider,
+                    chat_model,
                 )
 
         # Log the complete interaction to disk
@@ -251,7 +273,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             full_response=full_response if 'full_response' in dir() else "",
             tool_calls=[],  # Tutor agent has no tools
             usage_data=usage_data if 'usage_data' in dir() else None,
-            model=chat_model if 'chat_model' in dir() else settings.gemini_model,
+            model=chat_model if 'chat_model' in dir() else chat_settings.llm_model,
             error=str(e),
         )
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
@@ -260,7 +282,13 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
 @router.post("/stream")
 async def stream_chat(request: ChatRequest, background_tasks: BackgroundTasks):
     settings = get_settings()
-    if request.model and request.model not in get_available_models():
+    provider = request.provider or settings.llm_provider
+    available_models = get_available_models(provider)
+    if (
+        request.model
+        and request.model not in available_models
+        and request.model != resolve_provider_settings(settings, provider).llm_model
+    ):
         raise HTTPException(status_code=400, detail="Unknown chat model")
 
     return StreamingResponse(

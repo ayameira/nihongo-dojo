@@ -19,12 +19,19 @@ interface ChatProps {
 
 interface ChatModel {
   id: string;
+  key?: string;
+  provider?: string;
+  provider_name?: string;
+  configured?: boolean;
   name: string;
   input_cost_per_1m: number;
   output_cost_per_1m: number;
 }
 
 const MODEL_STORAGE_KEY = 'nihongo_chat_model';
+
+const getModelKey = (model: ChatModel) => model.key || `${model.provider || 'gemini'}:${model.id}`;
+const getModelProvider = (model: ChatModel) => model.provider || getModelKey(model).split(':', 1)[0] || 'gemini';
 
 const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => {
   const getActionText = () => {
@@ -53,7 +60,9 @@ const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => 
 export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUpdateFact, onDeleteFact, onRefreshFacts, sessionId, selectedSpeakerId, onRefreshSessions }) => {
   const [availableModels, setAvailableModels] = useState<ChatModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || '');
-  const chatModel = availableModels.some(model => model.id === selectedModel) ? selectedModel : null;
+  const selectedChatModel = availableModels.find(model => getModelKey(model) === selectedModel);
+  const chatModel = selectedChatModel?.configured === false ? null : selectedChatModel?.id || null;
+  const chatProvider = selectedChatModel?.configured === false || !selectedChatModel ? null : getModelProvider(selectedChatModel);
 
   const {
     messages,
@@ -65,7 +74,7 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
     sendMessage,
     sendDifficultyFeedback,
     clearPendingFeedback,
-  } = useChat(sessionId, chatModel);
+  } = useChat(sessionId, chatModel, chatProvider);
 
   const [inputValue, setInputValue] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -93,17 +102,24 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
         const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/config/models');
         if (!response.ok) return;
 
-        const data: { current_model?: string; models?: ChatModel[] } = await response.json();
+        const data: { current_key?: string; current_model?: string; provider?: string; models?: ChatModel[] } = await response.json();
         const models = Array.isArray(data.models) ? data.models : [];
         if (cancelled) return;
 
         setAvailableModels(models);
         setSelectedModel(prev => {
-          const defaultModel = models.some(model => model.id === data.current_model)
-            ? data.current_model || ''
-            : models[0]?.id || '';
+          const fallbackKey = data.current_key
+            || (data.current_model ? `${data.provider || 'gemini'}:${data.current_model}` : '');
+          const firstConfiguredModel = models.find(model => model.configured !== false);
+          const defaultModel = models.some(model => getModelKey(model) === fallbackKey)
+            ? fallbackKey
+            : firstConfiguredModel
+              ? getModelKey(firstConfiguredModel)
+              : models[0] ? getModelKey(models[0]) : '';
           const candidate = prev || localStorage.getItem(MODEL_STORAGE_KEY) || defaultModel;
-          const nextModel = models.some(model => model.id === candidate) ? candidate : defaultModel;
+          const nextModel = models.some(model => getModelKey(model) === candidate && model.configured !== false)
+            ? candidate
+            : defaultModel;
 
           if (nextModel) {
             localStorage.setItem(MODEL_STORAGE_KEY, nextModel);
@@ -424,8 +440,13 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
                 disabled={isLoading}
               >
                 {availableModels.map(model => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
+                  <option
+                    key={getModelKey(model)}
+                    value={getModelKey(model)}
+                    disabled={model.configured === false}
+                  >
+                    {model.provider_name ? `${model.provider_name}: ` : ''}{model.name}
+                    {model.configured === false ? ' (key needed)' : ''}
                   </option>
                 ))}
               </select>

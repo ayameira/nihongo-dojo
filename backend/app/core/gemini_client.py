@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class GeminiClient:
     def __init__(self, settings: Settings):
         self.settings = settings
-        genai.configure(api_key=settings.gemini_api_key)
+        genai.configure(api_key=settings.llm_api_key or settings.gemini_api_key)
 
         # Convert tool definitions to Gemini format
         self.tools = self._convert_tools()
@@ -133,7 +133,7 @@ class GeminiClient:
         }]
 
         return {
-            "model": model_name or self.settings.gemini_model,
+            "model": model_name or self.settings.llm_model or self.settings.gemini_model,
             "system_instruction": {"parts": [{"text": system_prompt}]} if system_prompt else None,
             "contents": contents,
             "tools": tools,
@@ -163,7 +163,7 @@ class GeminiClient:
             # Get system prompt and chat history from context
             system_prompt = context.get("system_prompt", "")
             chat_history = context.get("chat_history", [])
-            active_model = model_name or self.settings.gemini_model
+            active_model = model_name or self.settings.llm_model or self.settings.gemini_model
 
             # Create model with system instruction (per-request since system prompt varies)
             # Only include tools if use_tools is True
@@ -328,7 +328,7 @@ class GeminiClient:
             user_message = context.get("user_message", "")
 
             model = genai.GenerativeModel(
-                model_name=self.settings.gemini_model,
+                model_name=self.settings.llm_model or self.settings.gemini_model,
                 tools=self.tools,
                 system_instruction=system_prompt if system_prompt else None,
             )
@@ -386,8 +386,8 @@ class GeminiClient:
 
                 # No more function calls, return result
                 cost = (
-                    (total_input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
-                    (total_output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+                    (total_input_tokens * self.settings.llm_input_cost_per_1m / 1_000_000) +
+                    (total_output_tokens * self.settings.llm_output_cost_per_1m / 1_000_000)
                 )
 
                 return {
@@ -402,8 +402,8 @@ class GeminiClient:
 
             # Max iterations reached
             cost = (
-                (total_input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
-                (total_output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+                (total_input_tokens * self.settings.llm_input_cost_per_1m / 1_000_000) +
+                (total_output_tokens * self.settings.llm_output_cost_per_1m / 1_000_000)
             )
             return {
                 "text_response": "",
@@ -437,7 +437,7 @@ class GeminiClient:
         try:
             # Create model without tools, with JSON response format
             json_model = genai.GenerativeModel(
-                model_name=self.settings.gemini_model,
+                model_name=self.settings.llm_model or self.settings.gemini_model,
                 generation_config={"response_mime_type": "application/json"},
             )
 
@@ -454,8 +454,8 @@ class GeminiClient:
                 input_tokens = getattr(um, 'prompt_token_count', 0)
                 output_tokens = getattr(um, 'candidates_token_count', 0)
                 cost = (
-                    (input_tokens * self.settings.gemini_input_cost_per_1m / 1_000_000) +
-                    (output_tokens * self.settings.gemini_output_cost_per_1m / 1_000_000)
+                    (input_tokens * self.settings.llm_input_cost_per_1m / 1_000_000) +
+                    (output_tokens * self.settings.llm_output_cost_per_1m / 1_000_000)
                 )
                 usage = {
                     "input_tokens": input_tokens,
