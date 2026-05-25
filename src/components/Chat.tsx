@@ -1,9 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { useChat, Message, AgentAction } from '../hooks/useChat';
-import { AudioPlayer } from './AudioPlayer';
-import { Fact } from '../hooks/useFacts';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useChat } from '../hooks/useChat';
+import type { Fact } from '../hooks/useFacts';
+import { ChatComposer } from './chat/ChatComposer';
+import { MessageList } from './chat/MessageList';
 
 interface ChatProps {
   facts?: Fact[];
@@ -33,30 +32,6 @@ const MODEL_STORAGE_KEY = 'nihongo_chat_model';
 const getModelKey = (model: ChatModel) => model.key || `${model.provider || 'gemini'}:${model.id}`;
 const getModelProvider = (model: ChatModel) => model.provider || getModelKey(model).split(':', 1)[0] || 'gemini';
 
-const AgentActionIndicator: React.FC<{ action: AgentAction }> = ({ action }) => {
-  const getActionText = () => {
-    switch (action.type) {
-      case 'thinking':
-        return 'Thinking';
-      case 'tool_call':
-        return action.name ? `Using ${action.name}` : 'Processing';
-      case 'tool_result':
-        return action.name ? `Reading ${action.name}` : 'Reading results';
-      default:
-        return 'Working';
-    }
-  };
-
-  return (
-    <div className="agent-action">
-      <div className="action-indicator">
-        <span className="action-dot" />
-        <span className="action-text">{getActionText()}</span>
-      </div>
-    </div>
-  );
-};
-
 export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUpdateFact, onDeleteFact, onRefreshFacts, sessionId, selectedSpeakerId, onRefreshSessions }) => {
   const [availableModels, setAvailableModels] = useState<ChatModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || '');
@@ -76,8 +51,6 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
     clearPendingFeedback,
   } = useChat(sessionId, chatModel, chatProvider);
 
-  const [inputValue, setInputValue] = useState('');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'blackboard'>('chat');
   const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -90,8 +63,6 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoadingRef = useRef(false);
 
   useEffect(() => {
@@ -139,9 +110,18 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
     };
   }, []);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
+
+  const handleJumpToBottom = useCallback(() => {
+    setIsAtBottom(true);
+    scrollToBottom();
+  }, [scrollToBottom]);
+
+  const handleComposerSent = useCallback(() => {
+    setIsAtBottom(true);
+  }, []);
 
   const handleScroll = () => {
     const container = containerRef.current;
@@ -154,15 +134,7 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
     if (activeTab === 'chat' && isAtBottom) {
       scrollToBottom();
     }
-  }, [messages, loadingState, currentAction, activeTab, isAtBottom]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${textarea.scrollHeight}px`;
-    }
-  }, [inputValue]);
+  }, [messages, loadingState, currentAction, activeTab, isAtBottom, scrollToBottom]);
 
   // Refresh data when chat response completes
   useEffect(() => {
@@ -189,44 +161,9 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
     };
   }, [isLoading, onRefreshFacts, onRefreshSessions]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((!inputValue.trim() && !selectedImage) || isLoading) return;
-
-    await sendMessage(inputValue.trim(), selectedImage || undefined);
-    setInputValue('');
-    setSelectedImage(null);
-    setIsAtBottom(true);
-  };
-
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedModel(e.target.value);
     localStorage.setItem(MODEL_STORAGE_KEY, e.target.value);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) processFile(file);
-  };
-
-  const processFile = (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setSelectedImage(reader.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData.items;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const file = items[i].getAsFile();
-        if (file) {
-          processFile(file);
-          e.preventDefault();
-        }
-      }
-    }
   };
 
   // Facts editing handlers
@@ -278,132 +215,6 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
       await onDeleteFact(deleteConfirmFactId);
       setDeleteConfirmFactId(null);
     }
-  };
-
-  const renderUserMessage = (msg: Message) => (
-    <div key={msg.id} className="message-user">
-      {msg.image && (
-        <img
-          src={msg.image}
-          alt="Attachment"
-          className="user-image"
-        />
-      )}
-      <p className="user-text">{msg.content}</p>
-    </div>
-  );
-
-  // Determine if we should show a timestamp before a message
-  const shouldShowTimestamp = (msg: Message, index: number): boolean => {
-    if (index === 0) return true;
-
-    const prevMsg = messages[index - 1];
-    const timeDiff = msg.timestamp.getTime() - prevMsg.timestamp.getTime();
-    const fiveMinutes = 5 * 60 * 1000;
-
-    // Show timestamp if more than 5 minutes have passed
-    if (timeDiff > fiveMinutes) return true;
-
-    // Show timestamp if it's a different day
-    const prevDate = prevMsg.timestamp.toDateString();
-    const currDate = msg.timestamp.toDateString();
-    if (prevDate !== currDate) return true;
-
-    return false;
-  };
-
-  const formatTimestamp = (date: Date): string => {
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const isYesterday = date.toDateString() === yesterday.toDateString();
-
-    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    if (isToday) {
-      return time;
-    } else if (isYesterday) {
-      return `Yesterday, ${time}`;
-    } else {
-      return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
-    }
-  };
-
-  const renderAssistantMessage = (msg: Message) => {
-    // Split content by paragraphs for per-chunk audio playback
-    const chunks = msg.content
-      ? msg.content.split(/\n\n+/).filter(chunk => chunk.trim())
-      : [];
-
-    const markdownComponents = {
-      p: ({ children }: { children?: React.ReactNode }) => <p className="prose-p">{children}</p>,
-      ul: ({ children }: { children?: React.ReactNode }) => <ul className="prose-ul">{children}</ul>,
-      ol: ({ children }: { children?: React.ReactNode }) => <ol className="prose-ol">{children}</ol>,
-      li: ({ children }: { children?: React.ReactNode }) => <li className="prose-li">{children}</li>,
-      strong: ({ children }: { children?: React.ReactNode }) => <strong className="prose-strong">{children}</strong>,
-      em: ({ children }: { children?: React.ReactNode }) => <em className="prose-em">{children}</em>,
-      code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
-        const isInline = !className;
-        return isInline ? (
-          <code className="prose-code-inline">{children}</code>
-        ) : (
-          <code className={`prose-code-block ${className || ''}`}>
-            {children}
-          </code>
-        );
-      },
-      blockquote: ({ children }: { children?: React.ReactNode }) => (
-        <blockquote className="prose-blockquote">{children}</blockquote>
-      ),
-    };
-
-    return (
-      <div key={msg.id} className="message-assistant group">
-        <div className="assistant-content">
-          {chunks.length > 0 ? (
-            chunks.map((chunk, index) => (
-              <div key={index} className="message-chunk">
-                <div className="chunk-content">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {chunk}
-                  </ReactMarkdown>
-                </div>
-                {msg.status === 'complete' && (
-                  <AudioPlayer text={chunk} speakerId={selectedSpeakerId} />
-                )}
-              </div>
-            ))
-          ) : (
-            msg.status === 'streaming' && !msg.content && (
-              <span className="streaming-cursor" />
-            )
-          )}
-        </div>
-
-        {/* Feedback buttons - whole message scope */}
-        {msg.status === 'complete' && (
-          <div className="feedback-buttons">
-            <button
-              onClick={() => sendDifficultyFeedback('too_hard')}
-              className={`feedback-btn ${pendingFeedback === 'too_hard' ? 'active-hard' : ''}`}
-            >
-              Too Hard
-            </button>
-            <button
-              onClick={() => sendDifficultyFeedback('too_easy')}
-              className={`feedback-btn ${pendingFeedback === 'too_easy' ? 'active-easy' : ''}`}
-            >
-              Too Easy
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderMessage = (msg: Message) => {
-    return msg.role === 'user' ? renderUserMessage(msg) : renderAssistantMessage(msg);
   };
 
   return (
@@ -484,47 +295,17 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
         className="messages-container"
       >
         {activeTab === 'chat' ? (
-          <>
-            {messages.length === 0 && (
-              <div className="empty-state">
-                <span className="empty-jp">はじめましょう</span>
-                <span className="empty-en">Let's begin your practice</span>
-              </div>
-            )}
-
-            {messages.map((msg, index) => (
-              <React.Fragment key={msg.id}>
-                {shouldShowTimestamp(msg, index) && (
-                  <div className="timestamp-cluster">
-                    <span className="timestamp-label">
-                      {formatTimestamp(msg.timestamp)}
-                    </span>
-                  </div>
-                )}
-                {renderMessage(msg)}
-              </React.Fragment>
-            ))}
-
-            {/* Agent Action Display */}
-            {isLoading && currentAction && (
-              <AgentActionIndicator action={currentAction} />
-            )}
-
-            {/* Scroll to bottom button */}
-            {!isAtBottom && isLoading && (
-              <button
-                onClick={() => {
-                  setIsAtBottom(true);
-                  scrollToBottom();
-                }}
-                className="scroll-bottom-btn"
-              >
-                ↓ New message
-              </button>
-            )}
-
-            <div ref={messagesEndRef} />
-          </>
+          <MessageList
+            messages={messages}
+            isLoading={isLoading}
+            currentAction={currentAction}
+            isAtBottom={isAtBottom}
+            messagesEndRef={messagesEndRef}
+            selectedSpeakerId={selectedSpeakerId}
+            pendingFeedback={pendingFeedback}
+            onDifficultyFeedback={sendDifficultyFeedback}
+            onJumpToBottom={handleJumpToBottom}
+          />
         ) : (
           <div className="notes-view">
             <div className="notes-header">
@@ -623,69 +404,12 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
         )}
       </div>
 
-      {/* Input Area */}
-      {activeTab === 'chat' && (
-        <div className="input-area">
-          {selectedImage && (
-            <div className="image-preview">
-              <img src={selectedImage} alt="Preview" />
-              <button onClick={() => setSelectedImage(null)} className="remove-image">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-          )}
-          <form onSubmit={handleSendMessage} className="input-form">
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="attach-btn"
-              title="Attach image"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            </button>
-
-            <div className="input-wrapper">
-              <textarea
-                ref={textareaRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onPaste={handlePaste}
-                onKeyDown={(e) => {
-                  // Ignore Enter during IME composition (Japanese/Chinese/Korean input)
-                  const isComposing = e.nativeEvent.isComposing || e.keyCode === 229;
-                  if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                    e.preventDefault();
-                    if ((inputValue.trim() || selectedImage) && !isLoading) {
-                      handleSendMessage(e);
-                    }
-                  }
-                }}
-                placeholder="Write something..."
-                className="message-input"
-                disabled={isLoading}
-                rows={1}
-              />
-
-              <button
-                type="submit"
-                disabled={(!inputValue.trim() && !selectedImage) || isLoading}
-                className="send-btn"
-                title="Send"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <ChatComposer
+        isVisible={activeTab === 'chat'}
+        isLoading={isLoading}
+        sendMessage={sendMessage}
+        onSent={handleComposerSent}
+      />
     </div>
   );
 };

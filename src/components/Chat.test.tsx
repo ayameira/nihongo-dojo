@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { Chat } from './Chat';
 import { Fact } from '../hooks/useFacts';
 
+const { mockMarkdownRender } = vi.hoisted(() => ({
+  mockMarkdownRender: vi.fn(),
+}));
+
 // Mock useChat hook
 const mockUseChat = vi.fn();
 vi.mock('../hooks/useChat', () => ({
@@ -12,7 +16,10 @@ vi.mock('../hooks/useChat', () => ({
 
 // Mock react-markdown
 vi.mock('react-markdown', () => ({
-  default: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div>,
+  default: ({ children }: { children: string }) => {
+    mockMarkdownRender(children);
+    return <div data-testid="markdown">{children}</div>;
+  },
 }));
 
 vi.mock('remark-gfm', () => ({
@@ -51,6 +58,7 @@ describe('Chat', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMarkdownRender.mockClear();
     global.fetch = vi.fn().mockResolvedValue({ ok: false });
     mockUseChat.mockReturnValue(defaultHookReturn);
   });
@@ -226,6 +234,40 @@ describe('Chat', () => {
       await user.type(input, 'Hello');
 
       expect(input).toHaveValue('Hello');
+    });
+
+    it('does not re-render markdown messages while typing a draft', async () => {
+      const user = userEvent.setup();
+      render(<Chat sessionId="test_session" />);
+
+      mockMarkdownRender.mockClear();
+      await user.type(screen.getByPlaceholderText('Write something...'), 'Hello');
+
+      expect(mockMarkdownRender).not.toHaveBeenCalled();
+    });
+
+    it('resizes the message input up to the dynamic height cap', async () => {
+      const user = userEvent.setup();
+      render(<Chat sessionId="test_session" />);
+
+      const input = screen.getByLabelText('Message') as HTMLTextAreaElement;
+      Object.defineProperty(input, 'scrollHeight', { configurable: true, value: 96 });
+
+      await user.type(input, 'This is a longer practice prompt');
+
+      await waitFor(() => {
+        expect(input.style.height).toBe('96px');
+        expect(input.style.overflowY).toBe('hidden');
+      });
+
+      Object.defineProperty(input, 'scrollHeight', { configurable: true, value: 500 });
+      await user.type(input, ' with enough extra text to keep growing');
+
+      const dynamicCap = Math.min(260, Math.max(140, Math.round(window.innerHeight * 0.32)));
+      await waitFor(() => {
+        expect(input.style.height).toBe(`${dynamicCap}px`);
+        expect(input.style.overflowY).toBe('auto');
+      });
     });
 
     it('calls sendMessage when form submitted', async () => {

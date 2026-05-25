@@ -34,6 +34,24 @@ interface UseChatReturn {
   clearPendingFeedback: () => void;
 }
 
+const updateLastAssistantMessage = (
+  messages: Message[],
+  patch: Partial<Pick<Message, 'content' | 'status'>>,
+): Message[] => {
+  const lastMessage = messages[messages.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant') {
+    return messages;
+  }
+
+  return [
+    ...messages.slice(0, -1),
+    {
+      ...lastMessage,
+      ...patch,
+    },
+  ];
+};
+
 export function useChat(
   sessionId: string | null,
   model?: string | null,
@@ -152,14 +170,7 @@ export function useChat(
           case 'text':
             fullContent += event.content || '';
             setCurrentAction(null); // Clear action when text starts streaming
-            setMessages(prev => {
-              const updated = [...prev];
-              const lastMsg = updated[updated.length - 1];
-              if (lastMsg.role === 'assistant') {
-                lastMsg.content = fullContent;
-              }
-              return updated;
-            });
+            setMessages(prev => updateLastAssistantMessage(prev, { content: fullContent }));
             break;
 
           case 'tool_call':
@@ -186,42 +197,25 @@ export function useChat(
 
           case 'done':
             setCurrentAction(null);
-            setMessages(prev => {
-              const updated = [...prev];
-              const lastMsg = updated[updated.length - 1];
-              if (lastMsg.role === 'assistant') {
-                lastMsg.status = 'complete';
-              }
-              return updated;
-            });
+            setMessages(prev => updateLastAssistantMessage(prev, { status: 'complete' }));
             break;
 
           case 'error':
             setCurrentAction(null);
-            setMessages(prev => {
-              const updated = [...prev];
-              const lastMsg = updated[updated.length - 1];
-              if (lastMsg.role === 'assistant') {
-                lastMsg.content = event.content || 'An error occurred';
-                lastMsg.status = 'error';
-              }
-              return updated;
-            });
+            setMessages(prev => updateLastAssistantMessage(prev, {
+              content: event.content || 'An error occurred',
+              status: 'error',
+            }));
             break;
         }
       }
 
     } catch (error) {
       console.error('Chat error:', error);
-      setMessages(prev => {
-        const updated = [...prev];
-        const lastMsg = updated[updated.length - 1];
-        if (lastMsg.role === 'assistant') {
-          lastMsg.content = `Error: ${error instanceof Error ? error.message : 'Failed to connect'}`;
-          lastMsg.status = 'error';
-        }
-        return updated;
-      });
+      setMessages(prev => updateLastAssistantMessage(prev, {
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to connect'}`,
+        status: 'error',
+      }));
     } finally {
       setIsLoading(false);
       setLoadingState('idle');
