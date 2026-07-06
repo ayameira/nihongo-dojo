@@ -90,6 +90,14 @@ describe('Chat', () => {
       expect(screen.getByPlaceholderText('Write something...')).toBeInTheDocument();
     });
 
+    it('focuses the message input when requested', async () => {
+      render(<Chat sessionId="test_session" focusComposerRequest={1} />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Message')).toHaveFocus();
+      });
+    });
+
     it('shows empty state when no messages', () => {
       mockUseChat.mockReturnValue({ ...defaultHookReturn, messages: [] });
       render(<Chat sessionId="test_session" />);
@@ -222,6 +230,34 @@ describe('Chat', () => {
       await user.click(screen.getByRole('button', { name: 'Chat' }));
 
       expect(screen.getByText('こんにちは')).toBeInTheDocument();
+    });
+
+    it('opens the profile tab when requested externally', async () => {
+      const { rerender } = render(
+        <Chat sessionId="test_session" facts={mockFacts} openProfileRequest={0} />
+      );
+
+      rerender(<Chat sessionId="test_session" facts={mockFacts} openProfileRequest={1} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Student Profile')).toBeInTheDocument();
+      });
+    });
+
+    it('opens the chat tab when requested externally', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <Chat sessionId="test_session" facts={mockFacts} openChatRequest={0} />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Profile' }));
+      expect(screen.getByText('Student Profile')).toBeInTheDocument();
+
+      rerender(<Chat sessionId="test_session" facts={mockFacts} openChatRequest={1} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('こんにちは')).toBeInTheDocument();
+      });
     });
   });
 

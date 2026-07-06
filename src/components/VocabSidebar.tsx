@@ -32,6 +32,8 @@ interface VocabSidebarProps {
   onNewChat?: () => void;
   currentView?: 'chat' | 'grammar';
   onViewChange?: (view: 'chat' | 'grammar') => void;
+  setupWizardOpen?: boolean;
+  onSetupWizardOpenChange?: (open: boolean) => void;
 }
 
 export const VocabSidebar: React.FC<VocabSidebarProps> = ({
@@ -45,6 +47,8 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   onNewChat,
   currentView = 'chat',
   onViewChange,
+  setupWizardOpen,
+  onSetupWizardOpenChange,
 }) => {
   const [stats, setStats] = useState<VocabStats>({ new: 0, learning: 0, mature: 0, total: 0 });
   const [learningVocab, setLearningVocab] = useState<VocabEntry[]>([]);
@@ -55,7 +59,9 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   const [searchResults, setSearchResults] = useState<VocabEntry[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedVocab, setSelectedVocab] = useState<VocabEntry | null>(null);
-  const [showConfig, setShowConfig] = useState(false);
+  const [internalShowConfig, setInternalShowConfig] = useState(false);
+  const showConfig = setupWizardOpen ?? internalShowConfig;
+  const setShowConfig = onSetupWizardOpenChange ?? setInternalShowConfig;
 
   const fetchStats = useCallback(async () => {
     try {
@@ -180,6 +186,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
         <div className="p-2 border-b border-paper-dark flex gap-1">
           <button
             onClick={() => onViewChange('chat')}
+            data-tutorial-target="chat-view"
             className={`flex-1 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
               currentView === 'chat'
                 ? 'bg-vermillion text-white'
@@ -190,6 +197,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
           </button>
           <button
             onClick={() => onViewChange('grammar')}
+            data-tutorial-target="grammar-tree"
             className={`flex-1 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
               currentView === 'grammar'
                 ? 'bg-vermillion text-white'
@@ -207,8 +215,10 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowConfig(true)}
+            data-tutorial-target="deck-settings"
             className="p-1 hover:bg-paper-dark rounded text-ink-muted hover:text-ink"
-            title="Settings"
+            aria-label="Configure decks"
+            title="Configure decks"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>

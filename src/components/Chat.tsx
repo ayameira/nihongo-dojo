@@ -14,6 +14,9 @@ interface ChatProps {
   sessionId: string | null;
   selectedSpeakerId?: number;
   onRefreshSessions?: () => Promise<void>;
+  openProfileRequest?: number;
+  openChatRequest?: number;
+  focusComposerRequest?: number;
 }
 
 interface ChatModel {
@@ -32,7 +35,20 @@ const MODEL_STORAGE_KEY = 'nihongo_chat_model';
 const getModelKey = (model: ChatModel) => model.key || `${model.provider || 'gemini'}:${model.id}`;
 const getModelProvider = (model: ChatModel) => model.provider || getModelKey(model).split(':', 1)[0] || 'gemini';
 
-export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUpdateFact, onDeleteFact, onRefreshFacts, sessionId, selectedSpeakerId, onRefreshSessions }) => {
+export const Chat: React.FC<ChatProps> = ({
+  facts,
+  factsLoading,
+  onAddFact,
+  onUpdateFact,
+  onDeleteFact,
+  onRefreshFacts,
+  sessionId,
+  selectedSpeakerId,
+  onRefreshSessions,
+  openProfileRequest = 0,
+  openChatRequest = 0,
+  focusComposerRequest = 0,
+}) => {
   const [availableModels, setAvailableModels] = useState<ChatModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || '');
   const selectedChatModel = availableModels.find(model => getModelKey(model) === selectedModel);
@@ -135,6 +151,18 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
       scrollToBottom();
     }
   }, [messages, loadingState, currentAction, activeTab, isAtBottom, scrollToBottom]);
+
+  useEffect(() => {
+    if (openProfileRequest > 0) {
+      setActiveTab('blackboard');
+    }
+  }, [openProfileRequest]);
+
+  useEffect(() => {
+    if (openChatRequest > 0) {
+      setActiveTab('chat');
+    }
+  }, [openChatRequest]);
 
   // Refresh data when chat response completes
   useEffect(() => {
@@ -280,6 +308,7 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
             </button>
             <button
               onClick={() => setActiveTab('blackboard')}
+              data-tutorial-target="profile-tab"
               className={`tab-btn ${activeTab === 'blackboard' ? 'active' : ''}`}
             >
               Profile
@@ -409,6 +438,7 @@ export const Chat: React.FC<ChatProps> = ({ facts, factsLoading, onAddFact, onUp
         isLoading={isLoading}
         sendMessage={sendMessage}
         onSent={handleComposerSent}
+        focusRequest={focusComposerRequest}
       />
     </div>
   );

@@ -5,6 +5,7 @@ interface ChatComposerProps {
   isLoading: boolean;
   sendMessage: (content: string, image?: string) => Promise<void>;
   onSent: () => void;
+  focusRequest?: number;
 }
 
 const MESSAGE_INPUT_MIN_HEIGHT = 44;
@@ -36,7 +37,7 @@ const resizeMessageInput = (textarea: HTMLTextAreaElement) => {
   textarea.style.overflowY = textarea.value && scrollHeight > maxHeight ? 'auto' : 'hidden';
 };
 
-export const ChatComposer: React.FC<ChatComposerProps> = React.memo(({ isVisible, isLoading, sendMessage, onSent }) => {
+export const ChatComposer: React.FC<ChatComposerProps> = React.memo(({ isVisible, isLoading, sendMessage, onSent, focusRequest = 0 }) => {
   const [inputValue, setInputValue] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +61,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = React.memo(({ isVisible
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (isVisible && focusRequest > 0) {
+      textareaRef.current?.focus();
+    }
+  }, [focusRequest, isVisible]);
 
   const processFile = (file: File) => {
     if (!file.type.startsWith('image/')) return;
@@ -141,6 +148,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = React.memo(({ isVisible
             }}
             placeholder="Write something..."
             aria-label="Message"
+            data-tutorial-target="message-composer"
             className="message-input"
             disabled={isLoading}
             rows={1}

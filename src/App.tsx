@@ -4,6 +4,8 @@ import VocabSidebar from './components/VocabSidebar';
 import RightSidebar from './components/RightSidebar';
 import CostDashboard from './components/CostDashboard';
 import GrammarPage from './components/GrammarPage';
+import FirstRunTutorial from './components/FirstRunTutorial';
+import type { TutorialStepId } from './components/FirstRunTutorial';
 import { useSessions } from './hooks/useSessions';
 import { useTTS } from './hooks/useTTS';
 import { useFacts } from './hooks/useFacts';
@@ -21,6 +23,7 @@ const MAX_SIDEBAR_WIDTH = 500;
 const DEFAULT_LEFT_WIDTH = 256;
 const DEFAULT_RIGHT_WIDTH = 240;
 const COLLAPSED_WIDTH = 48;
+const TUTORIAL_STORAGE_KEY = 'nihongo_first_run_tutorial_complete';
 
 function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -40,10 +43,15 @@ function App() {
     return saved ? parseInt(saved, 10) : DEFAULT_RIGHT_WIDTH;
   });
   const [showCostDashboard, setShowCostDashboard] = useState(false);
+  const [showAnkiSetup, setShowAnkiSetup] = useState(false);
+  const [showFirstRunTutorial, setShowFirstRunTutorial] = useState(() => {
+    return localStorage.getItem(TUTORIAL_STORAGE_KEY) !== 'true';
+  });
   const [currentView, setCurrentView] = useState<'chat' | 'grammar'>('chat');
   const [limitInfo, setLimitInfo] = useState<LimitInfo | null>(null);
   const [isResizingLeft, setIsResizingLeft] = useState(false);
   const [isResizingRight, setIsResizingRight] = useState(false);
+  const [chatOpenRequest, setChatOpenRequest] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const leftSidebarRef = useRef<HTMLDivElement>(null);
   const rightSidebarRef = useRef<HTMLDivElement>(null);
@@ -176,6 +184,34 @@ function App() {
   const totalSpent = limitInfo?.spent || 0;
   const weeklyLimit = limitInfo?.limit || 10;
 
+  const finishTutorial = useCallback(() => {
+    localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+    setShowFirstRunTutorial(false);
+  }, []);
+
+  const prepareTutorialStep = useCallback((step: TutorialStepId) => {
+    if (step === 'decks') {
+      setSidebarCollapsed(false);
+      setShowAnkiSetup(false);
+      setCurrentView('chat');
+      return;
+    }
+
+    if (step === 'chat') {
+      setCurrentView('chat');
+      setChatOpenRequest((request) => request + 1);
+      return;
+    }
+
+    if (step === 'profile') {
+      setCurrentView('chat');
+      return;
+    }
+
+    setSidebarCollapsed(false);
+    setCurrentView('chat');
+  }, []);
+
   return (
     <div ref={containerRef} className="flex h-screen bg-paper">
       {/* Vocabulary Sidebar */}
@@ -194,6 +230,8 @@ function App() {
           onNewChat={createSession}
           currentView={currentView}
           onViewChange={setCurrentView}
+          setupWizardOpen={showAnkiSetup}
+          onSetupWizardOpenChange={setShowAnkiSetup}
         />
       </div>
 
@@ -226,6 +264,7 @@ function App() {
               sessionId={currentSessionId}
               selectedSpeakerId={selectedSpeakerId}
               onRefreshSessions={refreshSessions}
+              openChatRequest={chatOpenRequest}
             />
           )
         ) : (
@@ -259,6 +298,7 @@ function App() {
           selectedSpeakerId={selectedSpeakerId}
           onSpeakerChange={setSelectedSpeakerId}
           ttsError={ttsError}
+          onTutorialClick={() => setShowFirstRunTutorial(true)}
         />
       </div>
 
@@ -266,6 +306,12 @@ function App() {
       <CostDashboard
         isOpen={showCostDashboard}
         onClose={() => setShowCostDashboard(false)}
+      />
+
+      <FirstRunTutorial
+        isOpen={showFirstRunTutorial}
+        onFinish={finishTutorial}
+        onStepChange={prepareTutorialStep}
       />
     </div>
   );

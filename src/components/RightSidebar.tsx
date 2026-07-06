@@ -13,6 +13,7 @@ interface RightSidebarProps {
   selectedSpeakerId: number;
   onSpeakerChange: (id: number) => void;
   ttsError: string | null;
+  onTutorialClick?: () => void;
 }
 
 const encouragements = [
@@ -157,6 +158,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   selectedSpeakerId,
   onSpeakerChange,
   ttsError,
+  onTutorialClick,
 }) => {
   const [currentQuote, setCurrentQuote] = useState(() =>
     Math.floor(Math.random() * literaryQuotes.length)
@@ -215,6 +217,15 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
       <div className="sidebar-header">
         <span className="sidebar-title">Dashboard</span>
         <div className="flex items-center gap-1">
+          {onTutorialClick && (
+            <button onClick={onTutorialClick} className="sidebar-toggle" title="Open tutorial">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </button>
+          )}
           <ThemeToggle />
           <button onClick={onToggle} className="sidebar-toggle" title="Collapse">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

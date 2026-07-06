@@ -75,6 +75,16 @@ describe('RightSidebar', () => {
 
       expect(defaultProps.onBudgetClick).toHaveBeenCalledTimes(1);
     });
+
+    it('opens the tutorial when guide button is clicked', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const onTutorialClick = vi.fn();
+      render(<RightSidebar {...defaultProps} onTutorialClick={onTutorialClick} />);
+
+      await user.click(screen.getByTitle('Open tutorial'));
+
+      expect(onTutorialClick).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('collapsed state', () => {
