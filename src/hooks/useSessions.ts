@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 export interface Session {
   id: string;
+  language_code: string;
   name: string | null;
   preview: string | null;
   message_count: number;
@@ -24,7 +25,7 @@ function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-export function useSessions(): UseSessionsReturn {
+export function useSessions(activeLanguageCode = 'ja'): UseSessionsReturn {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,7 +81,7 @@ export function useSessions(): UseSessionsReturn {
       const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: newId }),
+        body: JSON.stringify({ id: newId, language_code: activeLanguageCode }),
       });
 
       if (response.ok) {
@@ -96,7 +97,7 @@ export function useSessions(): UseSessionsReturn {
     localStorage.setItem('nihongo_session_id', newId);
 
     return newId;
-  }, []);
+  }, [activeLanguageCode]);
 
   const switchSession = useCallback((sessionId: string) => {
     setCurrentSessionId(sessionId);

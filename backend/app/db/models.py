@@ -11,6 +11,7 @@ class VocabEntry(Base):
     __tablename__ = "vocab_entries"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    language_code = Column(String(10), default="ja", nullable=False, index=True)
     kanji = Column(String(100), nullable=True)
     kana = Column(String(100), nullable=False)
     meaning = Column(Text, nullable=False)
@@ -34,6 +35,7 @@ class AnkiDeckConfig(Base):
     __tablename__ = "anki_deck_configs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    language_code = Column(String(10), default="ja", nullable=False, index=True)
     name = Column(String(255), nullable=False)  # user-facing label
     collection_path = Column(String(500), nullable=False)  # path to a collection.anki2
     deck_name = Column(String(255), nullable=False)  # exact Anki deck name
@@ -84,6 +86,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(String(50), primary_key=True)
+    language_code = Column(String(10), default="ja", nullable=False, index=True)
     name = Column(String(200), nullable=True)
     preview = Column(String(100), nullable=True)
     message_count = Column(Integer, default=0)
@@ -96,6 +99,7 @@ class StudentFact(Base):
     __tablename__ = "student_facts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    language_code = Column(String(10), nullable=True, index=True)
     content = Column(Text, nullable=False)
     source = Column(String(20), default="tutor")  # "tutor" or "compaction"
     created_at = Column(DateTime, default=func.now())
@@ -106,6 +110,7 @@ class GrammarEntry(Base):
     __tablename__ = "grammar_entries"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    language_code = Column(String(10), default="ja", nullable=False, index=True)
     pattern = Column(String(200), nullable=False)  # e.g. "ている", "が 1"
     meaning = Column(Text, nullable=False)  # English meaning
     jlpt_level = Column(String(5), nullable=True)  # "N5"-"N1", null for custom

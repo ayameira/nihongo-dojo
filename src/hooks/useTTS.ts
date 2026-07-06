@@ -20,12 +20,12 @@ interface UseTTSReturn {
   setSelectedSpeakerId: (id: number) => void;
 }
 
-const STORAGE_KEY = 'nihongo-dojo-tts-speaker';
+const storageKey = (languageCode: string) => `nihongo-dojo-tts-speaker:${languageCode}`;
 
-export function useTTS(): UseTTSReturn {
+export function useTTS(languageCode = 'ja'): UseTTSReturn {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [selectedSpeakerId, setSelectedSpeakerIdState] = useState<number>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(storageKey(languageCode));
     return stored ? parseInt(stored, 10) : 2; // Default to Shikoku Metan
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -45,7 +45,7 @@ export function useTTS(): UseTTSReturn {
         setSpeakers(data.speakers);
 
         // If stored speaker doesn't exist in available speakers, use default
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = localStorage.getItem(storageKey(languageCode));
         if (!stored || !data.speakers.some((s) => s.id === parseInt(stored, 10))) {
           setSelectedSpeakerIdState(data.default_speaker_id);
         }
@@ -64,12 +64,12 @@ export function useTTS(): UseTTSReturn {
     };
 
     fetchSpeakers();
-  }, []);
+  }, [languageCode]);
 
   const setSelectedSpeakerId = useCallback((id: number) => {
     setSelectedSpeakerIdState(id);
-    localStorage.setItem(STORAGE_KEY, id.toString());
-  }, []);
+    localStorage.setItem(storageKey(languageCode), id.toString());
+  }, [languageCode]);
 
   return {
     speakers,

@@ -44,6 +44,7 @@ async def list_speakers():
 class TTSRequest(BaseModel):
     text: str
     speaker_id: Optional[int] = None
+    language_code: Optional[str] = None
 
 
 def get_cache_path(text: str, speaker_id: int) -> Path:

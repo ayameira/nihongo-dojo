@@ -3,6 +3,7 @@ import { useChat } from '../hooks/useChat';
 import type { Fact } from '../hooks/useFacts';
 import { ChatComposer } from './chat/ChatComposer';
 import { MessageList } from './chat/MessageList';
+import type { LanguageProfile } from '../hooks/useLanguageProfiles';
 
 interface ChatProps {
   facts?: Fact[];
@@ -12,6 +13,11 @@ interface ChatProps {
   onDeleteFact?: (id: number) => Promise<boolean>;
   onRefreshFacts?: () => Promise<void>;
   sessionId: string | null;
+  languageCode?: string;
+  speechLanguage?: string;
+  languageProfiles?: LanguageProfile[];
+  activeTargetLanguageCode?: string;
+  onActiveTargetLanguageChange?: (code: string) => void;
   selectedSpeakerId?: number;
   onRefreshSessions?: () => Promise<void>;
   openProfileRequest?: number;
@@ -43,6 +49,11 @@ export const Chat: React.FC<ChatProps> = ({
   onDeleteFact,
   onRefreshFacts,
   sessionId,
+  languageCode = 'ja',
+  speechLanguage = 'ja-JP',
+  languageProfiles = [],
+  activeTargetLanguageCode = 'ja',
+  onActiveTargetLanguageChange,
   selectedSpeakerId,
   onRefreshSessions,
   openProfileRequest = 0,
@@ -65,7 +76,7 @@ export const Chat: React.FC<ChatProps> = ({
     sendMessage,
     sendDifficultyFeedback,
     clearPendingFeedback,
-  } = useChat(sessionId, chatModel, chatProvider);
+  } = useChat(sessionId, chatModel, chatProvider, languageCode);
 
   const [activeTab, setActiveTab] = useState<'chat' | 'blackboard'>('chat');
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -268,6 +279,25 @@ export const Chat: React.FC<ChatProps> = ({
         </div>
 
         <div className="header-right">
+          {languageProfiles.length > 1 && onActiveTargetLanguageChange && (
+            <label className="model-selector" title="Target language workspace">
+              <span className="model-selector-label">Language</span>
+              <select
+                aria-label="Target language"
+                value={activeTargetLanguageCode}
+                onChange={(event) => onActiveTargetLanguageChange(event.target.value)}
+                className="model-select"
+                disabled={isLoading}
+              >
+                {languageProfiles.map(profile => (
+                  <option key={profile.code} value={profile.code}>
+                    {profile.display_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           {availableModels.length > 0 && (
             <label className="model-selector" title="Chat model">
               <span className="model-selector-label">Model</span>
@@ -331,6 +361,8 @@ export const Chat: React.FC<ChatProps> = ({
             isAtBottom={isAtBottom}
             messagesEndRef={messagesEndRef}
             selectedSpeakerId={selectedSpeakerId}
+            speechLanguage={speechLanguage}
+            languageCode={languageCode}
             pendingFeedback={pendingFeedback}
             onDifficultyFeedback={sendDifficultyFeedback}
             onJumpToBottom={handleJumpToBottom}

@@ -57,6 +57,29 @@ class TestCreateSession:
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == custom_id
+        assert data["language_code"] == "ja"
+
+    @pytest.mark.asyncio
+    async def test_creates_session_with_active_language_code(self, test_client):
+        """Test creating a session with target language metadata."""
+        response = await test_client.post(
+            "/api/sessions",
+            json={"id": "language_session", "language_code": "ja"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["language_code"] == "ja"
+
+    @pytest.mark.asyncio
+    async def test_unknown_session_language_falls_back_to_japanese(self, test_client):
+        """Until another profile exists, unknown language codes normalize to Japanese."""
+        response = await test_client.post(
+            "/api/sessions",
+            json={"id": "fallback_language_session", "language_code": "es"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["language_code"] == "ja"
 
     @pytest.mark.asyncio
     async def test_session_has_timestamps(self, test_client):

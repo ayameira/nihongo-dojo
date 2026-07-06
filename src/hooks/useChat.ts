@@ -56,6 +56,7 @@ export function useChat(
   sessionId: string | null,
   model?: string | null,
   provider?: string | null,
+  languageCode?: string | null,
 ): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -152,6 +153,7 @@ export function useChat(
           difficulty_feedback: pendingFeedback,
           model: model || undefined,
           provider: provider || undefined,
+          language_code: languageCode || undefined,
         }),
       });
 
@@ -221,7 +223,7 @@ export function useChat(
       setLoadingState('idle');
       setCurrentAction(null);
     }
-  }, [isLoading, model, pendingFeedback, provider, sessionId]);
+  }, [isLoading, languageCode, model, pendingFeedback, provider, sessionId]);
 
   const sendDifficultyFeedback = useCallback((direction: 'too_hard' | 'too_easy') => {
     setPendingFeedback(direction);

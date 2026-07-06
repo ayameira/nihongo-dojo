@@ -14,8 +14,9 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, update, and_
 
 from app.db.database import async_session_maker
-from app.db.models import GrammarEntry, ChatMessage
+from app.db.models import GrammarEntry, ChatMessage, ChatSession
 from app.config import get_settings, Settings, resolve_provider_settings
+from app.core.language_profiles import get_language_profile, normalize_language_code
 
 logger = logging.getLogger(__name__)
 
@@ -29,45 +30,7 @@ MAX_MESSAGES_PER_POINT = 10
 MAX_GRAMMAR_PER_RUN = 20
 
 
-ASSESSMENT_PROMPT_TEMPLATE = """You are evaluating a Japanese language student's proficiency with specific grammar points.
-
-For each grammar point below, I will show you relevant excerpts from the student's conversations where they used (or attempted to use) the grammar.
-
-Evaluate each grammar point and return a JSON response with your assessments.
-
-## Grammar Points to Assess
-{grammar_points}
-
-## Relevant Conversation Excerpts
-{excerpts}
-
-## Output Format
-Return ONLY valid JSON:
-{{
-  "assessments": [
-    {{
-      "grammar_id": <id>,
-      "pattern": "<pattern>",
-      "proficiency": "beginner" | "developing" | "proficient" | "mastered",
-      "times_used_correctly": <count>,
-      "times_used_incorrectly": <count>,
-      "recommendation": "keep_learning" | "promote_to_burned" | "demote_to_new",
-      "reasoning": "<brief explanation>"
-    }}
-  ]
-}}
-
-Proficiency levels:
-- beginner: Student has barely used it or uses it incorrectly most of the time
-- developing: Student uses it sometimes correctly but still makes mistakes
-- proficient: Student uses it correctly most of the time with minor errors
-- mastered: Student uses it consistently and naturally in varied contexts
-
-Recommendations:
-- keep_learning: Student is making progress but needs more practice
-- promote_to_burned: Student has mastered this grammar point
-- demote_to_new: Student is struggling and may need to re-learn basics
-"""
+ASSESSMENT_PROMPT_TEMPLATE = get_language_profile("ja").grammar_assessment_prompt_template
 
 
 class GrammarAssessor:
@@ -83,11 +46,12 @@ class GrammarAssessor:
     ) -> "GrammarAssessor":
         return GrammarAssessor(resolve_provider_settings(self.settings, provider, model))
 
-    async def run_assessment(self) -> Dict:
+    async def run_assessment(self, language_code: Optional[str] = None) -> Dict:
         """Main entry point. Assess all eligible grammar points."""
+        language_code = normalize_language_code(language_code or self.settings.target_language_code)
 
         # 1. Get "Learning" grammar points that haven't been assessed recently
-        grammar_points = await self._get_assessable_grammar()
+        grammar_points = await self._get_assessable_grammar(language_code)
 
         if not grammar_points:
             logger.info("No grammar points need assessment")
@@ -96,7 +60,7 @@ class GrammarAssessor:
         # 2. For each grammar point, grep recent messages for relevant usage
         assessable_groups = []
         for grammar in grammar_points:
-            relevant_messages = await self._find_relevant_messages(grammar)
+            relevant_messages = await self._find_relevant_messages(grammar, language_code)
             if len(relevant_messages) >= MIN_RELEVANT_MESSAGES:
                 assessable_groups.append({
                     "grammar": grammar,
@@ -116,7 +80,7 @@ class GrammarAssessor:
 
         for i in range(0, len(assessable_groups), batch_size):
             batch = assessable_groups[i:i + batch_size]
-            assessments = await self._assess_batch(batch)
+            assessments = await self._assess_batch(batch, language_code)
             all_assessments.extend(assessments)
 
         # 4. Apply status changes based on AI recommendations
@@ -132,7 +96,7 @@ class GrammarAssessor:
             "changes_made": changes_made,
         }
 
-    async def _get_assessable_grammar(self) -> List[Dict]:
+    async def _get_assessable_grammar(self, language_code: str) -> List[Dict]:
         """Get Learning grammar points not assessed in the cooldown period."""
         cutoff = datetime.now() - timedelta(hours=ASSESSMENT_COOLDOWN_HOURS)
 
@@ -140,6 +104,7 @@ class GrammarAssessor:
             stmt = (
                 select(GrammarEntry)
                 .where(GrammarEntry.status == "Learning")
+                .where(GrammarEntry.language_code == language_code)
                 .where(
                     (GrammarEntry.last_assessed_at == None) |
                     (GrammarEntry.last_assessed_at < cutoff)
@@ -162,7 +127,7 @@ class GrammarAssessor:
                 for e in entries
             ]
 
-    async def _find_relevant_messages(self, grammar: Dict) -> List[Dict]:
+    async def _find_relevant_messages(self, grammar: Dict, language_code: str) -> List[Dict]:
         """Search recent messages for usage of a grammar pattern.
 
         This is the token-efficient pre-filtering step: we search the database
@@ -188,9 +153,11 @@ class GrammarAssessor:
 
             stmt = (
                 select(ChatMessage)
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
                 .where(ChatMessage.role == "user")
                 .where(ChatMessage.content.like(f"%{search_term}%"))
                 .where(ChatMessage.created_at > cutoff)
+                .where(ChatSession.language_code == language_code)
                 .order_by(ChatMessage.created_at.desc())
                 .limit(MAX_MESSAGES_PER_POINT)
             )
@@ -207,14 +174,17 @@ class GrammarAssessor:
                 for m in messages
             ]
 
-    async def _assess_batch(self, batch: List[Dict]) -> List[Dict]:
+    async def _assess_batch(self, batch: List[Dict], language_code: str) -> List[Dict]:
         """Send a batch of grammar points with their relevant messages to AI."""
         from app.core.llm_client import get_llm_client, is_llm_configured
+
+        profile = get_language_profile(language_code)
+        scheme_name = profile.grammar_level_scheme.name
 
         # Format grammar points
         grammar_text = "\n".join(
             f"- [ID: {g['grammar']['id']}] {g['grammar']['pattern']} "
-            f"({g['grammar']['meaning']}) [JLPT: {g['grammar'].get('jlpt_level', 'custom')}]"
+            f"({g['grammar']['meaning']}) [{scheme_name}: {g['grammar'].get('jlpt_level') or 'custom'}]"
             for g in batch
         )
 
@@ -226,7 +196,7 @@ class GrammarAssessor:
                 excerpts_parts.append(f"[Student]: {msg['content']}")
         excerpts_text = "\n".join(excerpts_parts)
 
-        prompt = ASSESSMENT_PROMPT_TEMPLATE.format(
+        prompt = profile.grammar_assessment_prompt_template.format(
             grammar_points=grammar_text,
             excerpts=excerpts_text,
         )
@@ -305,11 +275,12 @@ class GrammarAssessor:
 async def run_grammar_assessment(
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    language_code: Optional[str] = None,
 ) -> Optional[Dict]:
     """Entry point for background task integration."""
     try:
         assessor = GrammarAssessor().with_provider(provider, model)
-        return await assessor.run_assessment()
+        return await assessor.run_assessment(language_code)
     except Exception as e:
         logger.error(f"Grammar assessment failed: {e}")
         return {"status": "error", "error": str(e)}

@@ -11,10 +11,13 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from pydantic import BaseModel
 from sqlalchemy import select, func, update
+from sqlalchemy import or_
 
 from app.db.database import async_session_maker
 from app.db.models import ChatMessage, ChatSession, StudentFact
 from app.config import get_settings, Settings, resolve_provider_settings
+from app.core.context_builder import resolve_session_language
+from app.core.language_profiles import get_language_profile
 from app.core.llm_client import get_llm_client, is_llm_configured
 
 logger = logging.getLogger(__name__)
@@ -27,38 +30,7 @@ class CompactionResult(BaseModel):
     new_student_facts: Optional[str] = None
 
 
-COMPACTION_PROMPT_TEMPLATE = """You are the Memory Manager for Nihongo Dojo, a Japanese language tutoring application.
-
-I will provide you with:
-1. A 'Current Conversation Summary' (may be empty if this is the first compaction)
-2. A 'Recent Chunk' of 10 messages from the conversation
-
-## Task 1: Recursive Summarization
-Update the 'Current Conversation Summary' to include the key events and topics from the 'Recent Chunk'.
-- Keep it concise but specific
-- Include details like grammar points practiced, vocabulary themes, corrections made
-- Example: "User practiced Te-form verbs (tabete, nonde). Discussed travel plans to Tokyo. Corrected wa vs ga usage."
-
-## Task 2: Fact Extraction
-Did the user reveal any NEW permanent information about themselves in this chunk?
-This includes:
-- Biography (job, location, family)
-- Language learning goals
-- Interests and hobbies
-- Dislikes or preferences
-- Background context
-
-If yes, extract it clearly. If no new facts, return null.
-
-## Current Conversation Summary
-{current_summary}
-
-## Recent Chunk (10 messages)
-{messages_chunk}
-
-## Output Format
-Return ONLY valid JSON:
-{{"new_summary": "Updated comprehensive summary...", "new_student_facts": "New facts about the student..." or null}}"""
+COMPACTION_PROMPT_TEMPLATE = get_language_profile("ja").memory_compaction_prompt_template
 
 
 class MemoryService:
@@ -99,6 +71,7 @@ class MemoryService:
         logger.info(f"Starting compaction for session {session_id}")
 
         try:
+            language_code = await resolve_session_language(session_id, self.settings.target_language_code)
             # Step 1: Get oldest 10 non-archived messages
             messages = await self._get_oldest_active_messages(session_id, limit=10)
 
@@ -114,7 +87,7 @@ class MemoryService:
 
             # Step 4: Call the configured LLM for compaction
             compaction_result = await self._call_llm_for_compaction(
-                current_summary, messages_chunk
+                current_summary, messages_chunk, language_code
             )
 
             # Step 5: Save new summary to ChatSession
@@ -122,7 +95,7 @@ class MemoryService:
 
             # Step 6: If new student facts, add them to the database
             if compaction_result.new_student_facts:
-                await self._add_student_facts(compaction_result.new_student_facts)
+                await self._add_student_facts(compaction_result.new_student_facts, language_code)
 
             # Step 7: Mark messages as archived (only after successful save)
             message_ids = [m.id for m in messages]
@@ -179,7 +152,7 @@ class MemoryService:
         return "\n\n".join(lines)
 
     async def _call_llm_for_compaction(
-        self, current_summary: str, messages_chunk: str
+        self, current_summary: str, messages_chunk: str, language_code: str
     ) -> CompactionResult:
         """Call the configured LLM to generate compaction result."""
         if not is_llm_configured(self.settings):
@@ -187,7 +160,8 @@ class MemoryService:
 
         client = get_llm_client(self.settings)
 
-        prompt = COMPACTION_PROMPT_TEMPLATE.format(
+        profile = get_language_profile(language_code)
+        prompt = profile.memory_compaction_prompt_template.format(
             current_summary=current_summary
             or "(No previous summary - this is the first compaction)",
             messages_chunk=messages_chunk,
@@ -210,7 +184,7 @@ class MemoryService:
             await session.execute(stmt)
             await session.commit()
 
-    async def _add_student_facts(self, new_facts: str) -> None:
+    async def _add_student_facts(self, new_facts: str, language_code: str | None = None) -> None:
         """Add extracted facts to the student_facts table."""
         try:
             # Parse facts (expect newline or bullet-separated list)
@@ -226,10 +200,17 @@ class MemoryService:
                     if not fact_text:
                         continue
                     # Check for duplicate before adding
-                    stmt = select(StudentFact).where(StudentFact.content == fact_text)
+                    stmt = select(StudentFact).where(
+                        StudentFact.content == fact_text,
+                        or_(StudentFact.language_code == language_code, StudentFact.language_code.is_(None)),
+                    )
                     existing = (await session.execute(stmt)).scalar_one_or_none()
                     if not existing:
-                        session.add(StudentFact(content=fact_text, source="compaction"))
+                        session.add(StudentFact(
+                            content=fact_text,
+                            source="compaction",
+                            language_code=language_code,
+                        ))
                         added_count += 1
 
                 await session.commit()

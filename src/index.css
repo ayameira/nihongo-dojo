@@ -1423,6 +1423,8 @@ body {
 
 .message-input {
   width: 100%;
+  min-height: 44px;
+  max-height: clamp(140px, 32vh, 260px);
   padding: var(--space-sm) 0;
   padding-right: 40px;
   background: transparent;
@@ -1434,9 +1436,19 @@ body {
   outline: none;
   transition: border-color 0.2s ease;
   resize: none;
-  overflow-y: auto;
-  max-height: 200px;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   line-height: 1.5;
+}
+
+.message-input::-webkit-scrollbar {
+  width: 4px;
+}
+
+.message-input::-webkit-scrollbar-thumb {
+  background: var(--paper-dark);
+  border-radius: 999px;
 }
 
 .message-input::placeholder {

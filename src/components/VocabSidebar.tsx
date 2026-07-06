@@ -5,6 +5,7 @@ import type { Session } from '../hooks/useSessions';
 
 interface VocabEntry {
   id: number;
+  language_code: string;
   kanji: string | null;
   kana: string;
   meaning: string;
@@ -34,6 +35,7 @@ interface VocabSidebarProps {
   onViewChange?: (view: 'chat' | 'grammar') => void;
   setupWizardOpen?: boolean;
   onSetupWizardOpenChange?: (open: boolean) => void;
+  languageCode?: string;
 }
 
 export const VocabSidebar: React.FC<VocabSidebarProps> = ({
@@ -49,6 +51,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   onViewChange,
   setupWizardOpen,
   onSetupWizardOpenChange,
+  languageCode = 'ja',
 }) => {
   const [stats, setStats] = useState<VocabStats>({ new: 0, learning: 0, mature: 0, total: 0 });
   const [learningVocab, setLearningVocab] = useState<VocabEntry[]>([]);
@@ -62,10 +65,11 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   const [internalShowConfig, setInternalShowConfig] = useState(false);
   const showConfig = setupWizardOpen ?? internalShowConfig;
   const setShowConfig = onSetupWizardOpenChange ?? setInternalShowConfig;
+  const languageParam = `language_code=${encodeURIComponent(languageCode)}`;
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/vocab/stats');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/vocab/stats?${languageParam}`);
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -73,11 +77,11 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
     } catch (error) {
       console.error('Failed to fetch vocab stats:', error);
     }
-  }, []);
+  }, [languageParam]);
 
   const fetchLearningVocab = useCallback(async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/vocab/learning?limit=50');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/vocab/learning?limit=50&${languageParam}`);
       if (response.ok) {
         const data = await response.json();
         setLearningVocab(data);
@@ -85,11 +89,11 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
     } catch (error) {
       console.error('Failed to fetch learning vocab:', error);
     }
-  }, []);
+  }, [languageParam]);
 
   const fetchMatureVocab = useCallback(async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/vocab?status=Mature&limit=50');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/vocab?status=Mature&limit=50&${languageParam}`);
       if (response.ok) {
         const data = await response.json();
         setMatureVocab(data.items || []);
@@ -97,11 +101,11 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
     } catch (error) {
       console.error('Failed to fetch mature vocab:', error);
     }
-  }, []);
+  }, [languageParam]);
 
   const fetchNewVocab = useCallback(async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/vocab?status=New&limit=50');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/vocab?status=New&limit=50&${languageParam}`);
       if (response.ok) {
         const data = await response.json();
         setNewVocab(data.items || []);
@@ -109,7 +113,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
     } catch (error) {
       console.error('Failed to fetch new vocab:', error);
     }
-  }, []);
+  }, [languageParam]);
 
   const refreshVocab = useCallback(() => {
     fetchStats();
@@ -137,7 +141,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
 
     setIsSearching(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/vocab?search=${encodeURIComponent(query)}&limit=20`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/vocab?search=${encodeURIComponent(query)}&limit=20&${languageParam}`);
       if (response.ok) {
         const data = await response.json();
         setSearchResults(data.items || []);
@@ -145,7 +149,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
     } catch (error) {
       console.error('Search failed:', error);
     }
-  }, []);
+  }, [languageParam]);
 
   const formatVocabDisplay = (vocab: VocabEntry) => {
     if (vocab.kanji) {
@@ -424,6 +428,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
       {/* Anki Setup Wizard */}
       {showConfig && (
         <AnkiSetupWizard
+          languageCode={languageCode}
           onClose={() => setShowConfig(false)}
           onSynced={refreshVocab}
         />

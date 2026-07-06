@@ -2,6 +2,8 @@ import logging
 import re
 from typing import Any, Dict
 
+from app.core.language_profiles import get_language_profile, normalize_language_code
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +34,10 @@ MANAGE_STUDENT_FACTS_TOOL = {
             "fact_id": {
                 "type": "integer",
                 "description": "Required for 'edit' and 'delete'. The ID of the fact to modify (shown in brackets in the facts list)."
+            },
+            "language_code": {
+                "type": "string",
+                "description": "Optional target language code for language-specific facts. Leave absent for global learner facts."
             }
         },
         "required": ["action"]
@@ -51,7 +57,7 @@ MANAGE_GRAMMAR_TOOL = {
             },
             "pattern": {
                 "type": "string",
-                "description": "The Japanese grammar pattern (e.g. 'ている', 'ければ'). Required for 'add' and 'start_learning'."
+                "description": "The target-language grammar pattern (e.g. Japanese 'ている', 'ければ'). Required for 'add' and 'start_learning'."
             },
             "meaning": {
                 "type": "string",
@@ -72,7 +78,11 @@ MANAGE_GRAMMAR_TOOL = {
             },
             "jlpt_level": {
                 "type": "string",
-                "description": "JLPT level (N5, N4, N3, N2, N1). Optional for 'add'."
+                "description": "Profile grammar level. For Japanese, this is JLPT level (N5, N4, N3, N2, N1). Optional for 'add'."
+            },
+            "language_code": {
+                "type": "string",
+                "description": "Target language code. Defaults to the active session language."
             }
         },
         "required": ["action"]
@@ -102,11 +112,14 @@ async def execute_manage_student_facts(args: Dict[str, Any]) -> str:
     """Manage student facts in the database."""
     from app.db.database import async_session_maker
     from app.db.models import StudentFact
-    from sqlalchemy import select
+    from sqlalchemy import select, or_
 
     action = args.get("action")
     content = args.get("content", "").strip()
     fact_id = args.get("fact_id")
+    language_code = args.get("language_code")
+    if language_code is not None:
+        language_code = normalize_language_code(language_code)
 
     if not action:
         return "Error: 'action' is required"
@@ -117,12 +130,15 @@ async def execute_manage_student_facts(args: Dict[str, Any]) -> str:
                 return "Error: 'content' is required for add action"
 
             # Check for duplicate (exact match)
-            stmt = select(StudentFact).where(StudentFact.content == content)
+            stmt = select(StudentFact).where(
+                StudentFact.content == content,
+                or_(StudentFact.language_code == language_code, StudentFact.language_code.is_(None)),
+            )
             existing = (await session.execute(stmt)).scalar_one_or_none()
             if existing:
                 return "Fact already exists (duplicate not added)"
 
-            fact = StudentFact(content=content, source="listener")
+            fact = StudentFact(content=content, source="listener", language_code=language_code)
             session.add(fact)
             await session.commit()
             await session.refresh(fact)
@@ -169,12 +185,14 @@ async def execute_manage_grammar(args: Dict[str, Any]) -> str:
     from sqlalchemy import select
 
     action = args.get("action")
+    language_code = normalize_language_code(args.get("language_code"))
+    profile = get_language_profile(language_code)
 
     if not action:
         return "Error: 'action' is required"
 
     def normalized_jlpt_level(value: Any) -> str | None:
-        if value in ["N5", "N4", "N3", "N2", "N1"]:
+        if value in profile.grammar_level_scheme.levels:
             return value
         return None
 
@@ -186,7 +204,10 @@ async def execute_manage_grammar(args: Dict[str, Any]) -> str:
         return f"{existing_notes}\n\n{new_notes}"
 
     async def find_existing_grammar(pattern: str) -> GrammarEntry | None:
-        stmt = select(GrammarEntry).where(GrammarEntry.pattern == pattern)
+        stmt = select(GrammarEntry).where(
+            GrammarEntry.language_code == language_code,
+            GrammarEntry.pattern == pattern,
+        )
         exact = (await session.execute(stmt)).scalar_one_or_none()
         if exact:
             return exact
@@ -195,7 +216,7 @@ async def execute_manage_grammar(args: Dict[str, Any]) -> str:
         if not normalized:
             return None
 
-        stmt = select(GrammarEntry)
+        stmt = select(GrammarEntry).where(GrammarEntry.language_code == language_code)
         entries = (await session.execute(stmt)).scalars().all()
         matches = [
             entry for entry in entries
@@ -221,6 +242,7 @@ async def execute_manage_grammar(args: Dict[str, Any]) -> str:
             jlpt_level = normalized_jlpt_level(args.get("jlpt_level"))
 
             entry = GrammarEntry(
+                language_code=language_code,
                 pattern=pattern,
                 meaning=meaning,
                 jlpt_level=jlpt_level,
@@ -257,6 +279,7 @@ async def execute_manage_grammar(args: Dict[str, Any]) -> str:
                 return "Error: 'meaning' is required when start_learning creates a custom point"
 
             entry = GrammarEntry(
+                language_code=language_code,
                 pattern=pattern,
                 meaning=meaning,
                 jlpt_level=normalized_jlpt_level(args.get("jlpt_level")),
@@ -278,7 +301,10 @@ async def execute_manage_grammar(args: Dict[str, Any]) -> str:
             if new_status not in ["New", "Learning", "Burned"]:
                 return f"Error: Invalid status '{new_status}'. Must be New, Learning, or Burned"
 
-            stmt = select(GrammarEntry).where(GrammarEntry.id == grammar_id)
+            stmt = select(GrammarEntry).where(
+                GrammarEntry.id == grammar_id,
+                GrammarEntry.language_code == language_code,
+            )
             entry = (await session.execute(stmt)).scalar_one_or_none()
             if not entry:
                 return f"Error: No grammar point found with ID {grammar_id}"
@@ -294,7 +320,10 @@ async def execute_manage_grammar(args: Dict[str, Any]) -> str:
             if grammar_id is None or not notes:
                 return "Error: 'grammar_id' and 'notes' required for add_notes"
 
-            stmt = select(GrammarEntry).where(GrammarEntry.id == grammar_id)
+            stmt = select(GrammarEntry).where(
+                GrammarEntry.id == grammar_id,
+                GrammarEntry.language_code == language_code,
+            )
             entry = (await session.execute(stmt)).scalar_one_or_none()
             if not entry:
                 return f"Error: No grammar point found with ID {grammar_id}"

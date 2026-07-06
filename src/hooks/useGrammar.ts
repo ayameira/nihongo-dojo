@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 
 export interface GrammarEntry {
   id: number;
+  language_code: string;
   pattern: string;
   meaning: string;
   jlpt_level: string | null;
@@ -20,12 +21,18 @@ export interface GrammarStats {
   by_level: Record<string, { total: number; New: number; Learning: number; Burned: number }>;
   total: number;
   custom: number;
+  level_scheme?: {
+    name: string;
+    levels: string[];
+    custom_label: string;
+  };
 }
 
 interface UseGrammarReturn {
   grammar: GrammarEntry[];
   grammarByLevel: Record<string, GrammarEntry[]>;
   stats: GrammarStats | null;
+  levels: string[];
   isLoading: boolean;
   statusFilter: string | null;
   searchQuery: string;
@@ -37,7 +44,7 @@ interface UseGrammarReturn {
   refreshGrammar: () => Promise<void>;
 }
 
-export function useGrammar(): UseGrammarReturn {
+export function useGrammar(languageCode = 'ja'): UseGrammarReturn {
   const [grammar, setGrammar] = useState<GrammarEntry[]>([]);
   const [stats, setStats] = useState<GrammarStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,6 +56,7 @@ export function useGrammar(): UseGrammarReturn {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
       if (searchQuery) params.set('search', searchQuery);
+      params.set('language_code', languageCode);
       params.set('limit', '1000');
 
       const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/grammar?${params.toString()}`);
@@ -59,11 +67,12 @@ export function useGrammar(): UseGrammarReturn {
     } catch (error) {
       console.error('Failed to fetch grammar:', error);
     }
-  }, [statusFilter, searchQuery]);
+  }, [languageCode, statusFilter, searchQuery]);
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/grammar/stats');
+      const params = new URLSearchParams({ language_code: languageCode });
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/grammar/stats?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -71,7 +80,7 @@ export function useGrammar(): UseGrammarReturn {
     } catch (error) {
       console.error('Failed to fetch grammar stats:', error);
     }
-  }, []);
+  }, [languageCode]);
 
   const refreshGrammar = useCallback(async () => {
     setIsLoading(true);
@@ -83,28 +92,26 @@ export function useGrammar(): UseGrammarReturn {
     refreshGrammar();
   }, [statusFilter, searchQuery]);
 
-  // Group grammar by JLPT level
+  // Group grammar by the active profile's level scheme.
+  const levels = stats?.level_scheme?.levels || ['N5', 'N4', 'N3', 'N2', 'N1'];
+  const customLabel = stats?.level_scheme?.custom_label || 'Custom';
+
   const grammarByLevel = useMemo(() => {
-    const grouped: Record<string, GrammarEntry[]> = {
-      N5: [],
-      N4: [],
-      N3: [],
-      N2: [],
-      N1: [],
-      Custom: [],
-    };
+    const grouped: Record<string, GrammarEntry[]> = Object.fromEntries(
+      [...levels, customLabel].map((level) => [level, []])
+    );
 
     for (const entry of grammar) {
-      const level = entry.jlpt_level || 'Custom';
+      const level = entry.jlpt_level || customLabel;
       if (grouped[level]) {
         grouped[level].push(entry);
       } else {
-        grouped.Custom.push(entry);
+        grouped[customLabel].push(entry);
       }
     }
 
     return grouped;
-  }, [grammar]);
+  }, [customLabel, grammar, levels]);
 
   const updateStatus = useCallback(async (id: number, status: string): Promise<boolean> => {
     try {
@@ -140,7 +147,7 @@ export function useGrammar(): UseGrammarReturn {
       const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/grammar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, language_code: languageCode }),
       });
 
       if (response.ok) {
@@ -154,7 +161,7 @@ export function useGrammar(): UseGrammarReturn {
       console.error('Failed to add grammar:', error);
       return null;
     }
-  }, [fetchStats]);
+  }, [fetchStats, languageCode]);
 
   const deleteGrammar = useCallback(async (id: number): Promise<boolean> => {
     try {
@@ -178,6 +185,7 @@ export function useGrammar(): UseGrammarReturn {
     grammar,
     grammarByLevel,
     stats,
+    levels: [...levels, customLabel],
     isLoading,
     statusFilter,
     searchQuery,

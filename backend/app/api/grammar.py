@@ -8,6 +8,8 @@ from datetime import datetime
 
 from app.db.database import get_session
 from app.db.models import GrammarEntry
+from app.config import get_settings
+from app.core.language_profiles import get_language_profile, normalize_language_code
 
 router = APIRouter()
 
@@ -17,6 +19,7 @@ class GrammarCreate(BaseModel):
     meaning: str
     jlpt_level: Optional[str] = None
     notes: Optional[str] = None
+    language_code: Optional[str] = None
 
 
 class GrammarUpdate(BaseModel):
@@ -33,6 +36,7 @@ class GrammarStatusUpdate(BaseModel):
 
 class GrammarResponse(BaseModel):
     id: int
+    language_code: str
     pattern: str
     meaning: str
     jlpt_level: Optional[str]
@@ -55,12 +59,15 @@ async def list_grammar(
     jlpt_level: Optional[str] = None,
     source: Optional[str] = None,
     search: Optional[str] = None,
+    language_code: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=1000),
     session=Depends(get_session)
 ):
     """List grammar entries with filtering and pagination."""
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
     stmt = select(GrammarEntry)
+    stmt = stmt.where(GrammarEntry.language_code == language_code)
 
     if status:
         stmt = stmt.where(GrammarEntry.status == status)
@@ -98,11 +105,17 @@ async def list_grammar(
 
 
 @router.get("/learning")
-async def get_learning_grammar(limit: int = 100, session=Depends(get_session)):
+async def get_learning_grammar(
+    limit: int = 100,
+    language_code: Optional[str] = None,
+    session=Depends(get_session),
+):
     """Get all grammar entries with 'Learning' status."""
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
     stmt = (
         select(GrammarEntry)
         .where(GrammarEntry.status == "Learning")
+        .where(GrammarEntry.language_code == language_code)
         .order_by(GrammarEntry.jlpt_level.asc(), GrammarEntry.updated_at.desc())
         .limit(limit)
     )
@@ -112,27 +125,39 @@ async def get_learning_grammar(limit: int = 100, session=Depends(get_session)):
 
 
 @router.get("/stats")
-async def get_grammar_stats(session=Depends(get_session)):
+async def get_grammar_stats(language_code: Optional[str] = None, session=Depends(get_session)):
     """Get grammar statistics by status and JLPT level."""
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
+    profile = get_language_profile(language_code)
+
     # Count by status
     by_status = {}
     for status in ["New", "Learning", "Burned"]:
-        stmt = select(func.count()).where(GrammarEntry.status == status)
+        stmt = select(func.count()).where(
+            GrammarEntry.status == status,
+            GrammarEntry.language_code == language_code,
+        )
         count = await session.scalar(stmt)
         by_status[status] = count or 0
 
     # Total count
-    total_stmt = select(func.count()).select_from(GrammarEntry)
+    total_stmt = select(func.count()).select_from(GrammarEntry).where(GrammarEntry.language_code == language_code)
     total = await session.scalar(total_stmt) or 0
 
     # Count custom (non-JLPT) entries
-    custom_stmt = select(func.count()).where(GrammarEntry.jlpt_level.is_(None))
+    custom_stmt = select(func.count()).where(
+        GrammarEntry.jlpt_level.is_(None),
+        GrammarEntry.language_code == language_code,
+    )
     custom = await session.scalar(custom_stmt) or 0
 
     # Count by JLPT level with status breakdown
     by_level = {}
-    for level in ["N5", "N4", "N3", "N2", "N1"]:
-        level_total_stmt = select(func.count()).where(GrammarEntry.jlpt_level == level)
+    for level in profile.grammar_level_scheme.levels:
+        level_total_stmt = select(func.count()).where(
+            GrammarEntry.jlpt_level == level,
+            GrammarEntry.language_code == language_code,
+        )
         level_total = await session.scalar(level_total_stmt) or 0
 
         level_stats = {"total": level_total}
@@ -140,6 +165,7 @@ async def get_grammar_stats(session=Depends(get_session)):
             stmt = select(func.count()).where(
                 and_(
                     GrammarEntry.jlpt_level == level,
+                    GrammarEntry.language_code == language_code,
                     GrammarEntry.status == status
                 )
             )
@@ -153,6 +179,11 @@ async def get_grammar_stats(session=Depends(get_session)):
         "by_level": by_level,
         "total": total,
         "custom": custom,
+        "level_scheme": {
+            "name": profile.grammar_level_scheme.name,
+            "levels": profile.grammar_level_scheme.levels,
+            "custom_label": profile.grammar_level_scheme.custom_label,
+        },
     }
 
 
@@ -170,11 +201,13 @@ async def get_grammar(grammar_id: int, session=Depends(get_session)):
 @router.post("")
 async def create_grammar(data: GrammarCreate, session=Depends(get_session)):
     """Create a new grammar entry (user-created)."""
-    # Validate JLPT level if provided
-    if data.jlpt_level and data.jlpt_level not in ["N5", "N4", "N3", "N2", "N1"]:
-        raise HTTPException(status_code=400, detail="Invalid JLPT level. Must be N5, N4, N3, N2, or N1")
+    language_code = normalize_language_code(data.language_code or get_settings().target_language_code)
+    levels = get_language_profile(language_code).grammar_level_scheme.levels
+    if data.jlpt_level and data.jlpt_level not in levels:
+        raise HTTPException(status_code=400, detail=f"Invalid grammar level. Must be one of: {', '.join(levels)}")
 
     entry = GrammarEntry(
+        language_code=language_code,
         pattern=data.pattern,
         meaning=data.meaning,
         jlpt_level=data.jlpt_level,
@@ -202,7 +235,8 @@ async def update_grammar(grammar_id: int, data: GrammarUpdate, session=Depends(g
     if data.meaning is not None:
         entry.meaning = data.meaning
     if data.jlpt_level is not None:
-        if data.jlpt_level not in ["N5", "N4", "N3", "N2", "N1", ""]:
+        levels = get_language_profile(entry.language_code).grammar_level_scheme.levels
+        if data.jlpt_level not in [*levels, ""]:
             raise HTTPException(status_code=400, detail="Invalid JLPT level")
         entry.jlpt_level = data.jlpt_level if data.jlpt_level else None
     if data.status is not None:
@@ -250,12 +284,18 @@ async def delete_grammar(grammar_id: int, session=Depends(get_session)):
 
 
 @router.post("/seed")
-async def seed_grammar(session=Depends(get_session)):
+async def seed_grammar(language_code: Optional[str] = None, session=Depends(get_session)):
     """Manually seed grammar from JLPT list file."""
     from app.services.grammar_seeder import seed_grammar_from_file
 
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
+    profile = get_language_profile(language_code)
+
     # Clear existing JLPT entries first
-    stmt = select(GrammarEntry).where(GrammarEntry.source == "jlpt")
+    stmt = select(GrammarEntry).where(
+        GrammarEntry.language_code == language_code,
+        GrammarEntry.source == profile.grammar_level_scheme.source_name,
+    )
     result = await session.execute(stmt)
     existing = result.scalars().all()
     for entry in existing:
@@ -263,5 +303,5 @@ async def seed_grammar(session=Depends(get_session)):
     await session.commit()
 
     # Seed fresh
-    result = await seed_grammar_from_file(session)
+    result = await seed_grammar_from_file(session, language_code=language_code)
     return result

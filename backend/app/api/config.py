@@ -8,6 +8,7 @@ from app.config import (
     get_provider_default_model,
     get_settings,
 )
+from app.core.language_profiles import list_language_profiles, get_language_profile
 from app.core.llm_client import is_llm_configured
 
 router = APIRouter()
@@ -68,6 +69,38 @@ async def get_models():
             for provider in MODEL_REGISTRY
         ],
         "models": models,
+    }
+
+
+@router.get("/languages")
+async def get_languages():
+    """Return available target-language profiles."""
+    settings = get_settings()
+    active = get_language_profile(settings.target_language_code)
+    profiles = []
+    for profile in list_language_profiles():
+        profiles.append({
+            "code": profile.code,
+            "display_name": profile.display_name,
+            "native_name": profile.native_name,
+            "speech_language": profile.speech_language,
+            "grammar_level_scheme": {
+                "name": profile.grammar_level_scheme.name,
+                "levels": profile.grammar_level_scheme.levels,
+                "source_name": profile.grammar_level_scheme.source_name,
+                "custom_label": profile.grammar_level_scheme.custom_label,
+            },
+            "vocabulary_semantics": {
+                "term_label": profile.vocabulary_semantics.term_label,
+                "reading_label": profile.vocabulary_semantics.reading_label,
+                "meaning_label": profile.vocabulary_semantics.meaning_label,
+                "part_of_speech_label": profile.vocabulary_semantics.part_of_speech_label,
+            },
+        })
+
+    return {
+        "active_language_code": active.code,
+        "profiles": profiles,
     }
 
 

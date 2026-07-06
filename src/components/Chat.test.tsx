@@ -141,7 +141,7 @@ describe('Chat', () => {
       expect(screen.getByText('Gemini 3 Pro Preview')).toBeInTheDocument();
 
       await waitFor(() => {
-        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-flash-preview', 'gemini');
+        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-flash-preview', 'gemini', 'ja');
       });
     });
 
@@ -177,8 +177,49 @@ describe('Chat', () => {
       expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_chat_model', 'gemini:gemini-3-pro-preview');
 
       await waitFor(() => {
-        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-pro-preview', 'gemini');
+        expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-pro-preview', 'gemini', 'ja');
       });
+    });
+
+    it('renders a target language selector only when multiple profiles exist', async () => {
+      const onLanguageChange = vi.fn();
+      render(
+        <Chat
+          sessionId="test_session"
+          languageProfiles={[
+            {
+              code: 'ja',
+              display_name: 'Japanese',
+              native_name: '日本語',
+              speech_language: 'ja-JP',
+              grammar_level_scheme: { name: 'JLPT', levels: ['N5'], custom_label: 'Custom', source_name: 'jlpt' },
+              vocabulary_semantics: {
+                term_label: 'term',
+                reading_label: 'reading',
+                meaning_label: 'meaning',
+                part_of_speech_label: 'part of speech',
+              },
+            },
+            {
+              code: 'es',
+              display_name: 'Spanish',
+              native_name: 'Español',
+              speech_language: 'es-ES',
+              grammar_level_scheme: { name: 'CEFR', levels: ['A1'], custom_label: 'Custom', source_name: 'cefr' },
+              vocabulary_semantics: {
+                term_label: 'term',
+                reading_label: 'reading',
+                meaning_label: 'meaning',
+                part_of_speech_label: 'part of speech',
+              },
+            },
+          ]}
+          activeTargetLanguageCode="ja"
+          onActiveTargetLanguageChange={onLanguageChange}
+        />
+      );
+
+      expect(screen.getByLabelText('Target language')).toBeInTheDocument();
     });
   });
 

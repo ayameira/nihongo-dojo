@@ -10,6 +10,7 @@ import { useSessions } from './hooks/useSessions';
 import { useTTS } from './hooks/useTTS';
 import { useFacts } from './hooks/useFacts';
 import { useTheme } from './hooks/useTheme';
+import { useLanguageProfiles } from './hooks/useLanguageProfiles';
 
 interface LimitInfo {
   spent: number;
@@ -58,6 +59,13 @@ function App() {
 
   // Session management
   const {
+    profiles,
+    activeLanguageCode,
+    activeProfile,
+    setActiveLanguageCode,
+  } = useLanguageProfiles();
+
+  const {
     sessions,
     currentSessionId,
     isLoading: sessionsLoading,
@@ -66,7 +74,13 @@ function App() {
     renameSession,
     deleteSession,
     refreshSessions,
-  } = useSessions();
+  } = useSessions(activeLanguageCode);
+
+  const currentSession = sessions.find((session) => session.id === currentSessionId) || null;
+  const sessionLanguageCode = currentSession?.language_code || activeLanguageCode;
+  const sessionProfile = profiles.find((profile) => profile.code === sessionLanguageCode)
+    || activeProfile
+    || null;
 
   // TTS voice selection
   const {
@@ -74,7 +88,7 @@ function App() {
     selectedSpeakerId,
     error: ttsError,
     setSelectedSpeakerId,
-  } = useTTS();
+  } = useTTS(sessionLanguageCode);
 
   // Student facts management
   const {
@@ -232,6 +246,7 @@ function App() {
           onViewChange={setCurrentView}
           setupWizardOpen={showAnkiSetup}
           onSetupWizardOpenChange={setShowAnkiSetup}
+          languageCode={sessionLanguageCode}
         />
       </div>
 
@@ -262,13 +277,18 @@ function App() {
               onDeleteFact={deleteFact}
               onRefreshFacts={refreshFacts}
               sessionId={currentSessionId}
+              languageCode={sessionLanguageCode}
+              speechLanguage={sessionProfile?.speech_language || 'ja-JP'}
+              languageProfiles={profiles}
+              activeTargetLanguageCode={activeLanguageCode}
+              onActiveTargetLanguageChange={setActiveLanguageCode}
               selectedSpeakerId={selectedSpeakerId}
               onRefreshSessions={refreshSessions}
               openChatRequest={chatOpenRequest}
             />
           )
         ) : (
-          <GrammarPage />
+          <GrammarPage languageCode={sessionLanguageCode} />
         )}
       </main>
 

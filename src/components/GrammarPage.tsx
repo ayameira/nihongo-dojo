@@ -9,15 +9,15 @@ const STATUS_COLORS: Record<string, string> = {
   Burned: 'bg-jade',
 };
 
-const JLPT_LEVELS = ['N5', 'N4', 'N3', 'N2', 'N1', 'Custom'] as const;
-
 interface AddGrammarModalProps {
   isOpen: boolean;
   onClose: () => void;
+  levels: string[];
+  levelSchemeName: string;
   onAdd: (data: { pattern: string; meaning: string; jlpt_level?: string; notes?: string }) => Promise<GrammarEntry | null>;
 }
 
-function AddGrammarModal({ isOpen, onClose, onAdd }: AddGrammarModalProps) {
+function AddGrammarModal({ isOpen, onClose, levels, levelSchemeName, onAdd }: AddGrammarModalProps) {
   const [pattern, setPattern] = useState('');
   const [meaning, setMeaning] = useState('');
   const [jlptLevel, setJlptLevel] = useState('');
@@ -86,7 +86,7 @@ function AddGrammarModal({ isOpen, onClose, onAdd }: AddGrammarModalProps) {
 
           <div>
             <label className="block text-sm font-medium text-ink-muted mb-1">
-              JLPT Level
+              {levelSchemeName} Level
             </label>
             <select
               value={jlptLevel}
@@ -94,11 +94,9 @@ function AddGrammarModal({ isOpen, onClose, onAdd }: AddGrammarModalProps) {
               className="w-full px-3 py-2 bg-paper-warm border border-paper-dark rounded-lg text-ink focus:outline-none focus:border-vermillion"
             >
               <option value="">Custom (no level)</option>
-              <option value="N5">N5</option>
-              <option value="N4">N4</option>
-              <option value="N3">N3</option>
-              <option value="N2">N2</option>
-              <option value="N1">N1</option>
+              {levels.map(level => (
+                <option key={level} value={level}>{level}</option>
+              ))}
             </select>
           </div>
 
@@ -238,10 +236,15 @@ function LevelSection({ level, entries, isExpanded, onToggle, onStatusChange, st
   );
 }
 
-export default function GrammarPage() {
+interface GrammarPageProps {
+  languageCode?: string;
+}
+
+export default function GrammarPage({ languageCode = 'ja' }: GrammarPageProps) {
   const {
     grammarByLevel,
     stats,
+    levels,
     isLoading,
     statusFilter,
     searchQuery,
@@ -249,10 +252,12 @@ export default function GrammarPage() {
     setSearchQuery,
     updateStatus,
     addGrammar,
-  } = useGrammar();
+  } = useGrammar(languageCode);
 
-  const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set(['N5']));
+  const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set([levels[0] || 'N5']));
   const [showAddModal, setShowAddModal] = useState(false);
+  const customLabel = stats?.level_scheme?.custom_label || 'Custom';
+  const grammarLevels = levels.filter(level => level !== customLabel);
 
   const toggleLevel = useCallback((level: string) => {
     setExpandedLevels(prev => {
@@ -359,7 +364,7 @@ export default function GrammarPage() {
             <span className="text-ink-muted">Loading grammar...</span>
           </div>
         ) : (
-          JLPT_LEVELS.map(level => (
+          levels.map(level => (
             <LevelSection
               key={level}
               level={level}
@@ -367,7 +372,7 @@ export default function GrammarPage() {
               isExpanded={expandedLevels.has(level)}
               onToggle={() => toggleLevel(level)}
               onStatusChange={handleStatusChange}
-              stats={level !== 'Custom' ? stats?.by_level[level] : undefined}
+              stats={level !== customLabel ? stats?.by_level[level] : undefined}
             />
           ))
         )}
@@ -377,6 +382,8 @@ export default function GrammarPage() {
       <AddGrammarModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
+        levels={grammarLevels}
+        levelSchemeName={stats?.level_scheme?.name || 'JLPT'}
         onAdd={addGrammar}
       />
     </div>

@@ -55,3 +55,19 @@ class TestConfigModels:
         groq_models = [model for model in data["models"] if model["provider"] == "groq"]
         assert "llama-3.1-8b-instant" in {model["id"] for model in groq_models}
         assert all(model["configured"] for model in groq_models)
+
+
+class TestConfigLanguages:
+    """Tests for GET /api/config/languages endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_returns_japanese_profile_metadata(self, test_client):
+        response = await test_client.get("/api/config/languages")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["active_language_code"] == "ja"
+        profile = data["profiles"][0]
+        assert profile["code"] == "ja"
+        assert profile["speech_language"] == "ja-JP"
+        assert profile["grammar_level_scheme"]["levels"] == ["N5", "N4", "N3", "N2", "N1"]

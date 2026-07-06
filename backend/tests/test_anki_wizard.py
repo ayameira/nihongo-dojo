@@ -2,6 +2,7 @@
 import os
 import sqlite3
 import tempfile
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -183,6 +184,43 @@ class TestImportDeckConfig:
 
 
 class TestAnkiAPI:
+    @pytest.mark.asyncio
+    async def test_upload_collection_lists_decks(
+        self,
+        test_client,
+        wanikani_collection,
+        tmp_path,
+        monkeypatch,
+    ):
+        from app.api import anki as anki_api
+
+        monkeypatch.setattr(anki_api, "UPLOADED_COLLECTIONS_DIR", tmp_path)
+
+        with open(wanikani_collection, "rb") as collection:
+            res = await test_client.post(
+                "/api/anki/upload",
+                files={"file": ("collection.anki2", collection, "application/octet-stream")},
+            )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["filename"] == "collection.anki2"
+        saved_path = Path(data["path"])
+        assert saved_path.parent == tmp_path
+        assert saved_path.exists()
+        assert {d["deck_name"] for d in data["decks"]} == {"Japanese::WaniKani", "Core 2k"}
+
+        res = await test_client.post("/api/anki/configs", json={
+            "name": "WaniKani", "collection_path": data["path"],
+            "deck_name": "Japanese::WaniKani", "kana_field": "Reading",
+            "meaning_field": "Meaning", "kanji_field": "Characters",
+        })
+        config_id = res.json()["id"]
+
+        res = await test_client.delete(f"/api/anki/configs/{config_id}")
+        assert res.status_code == 200
+        assert not saved_path.exists()
+
     @pytest.mark.asyncio
     async def test_list_and_create_config(self, test_client, wanikani_collection):
         # Inspect decks

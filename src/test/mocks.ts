@@ -5,6 +5,7 @@ import type { Message } from '../hooks/useChat';
 export const mockSessions: Session[] = [
   {
     id: 'session_1',
+    language_code: 'ja',
     name: 'Test Session 1',
     preview: 'Hello world',
     message_count: 5,
@@ -13,6 +14,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: 'session_2',
+    language_code: 'ja',
     name: null,
     preview: 'Another conversation',
     message_count: 3,
@@ -21,6 +23,7 @@ export const mockSessions: Session[] = [
   },
   {
     id: 'session_3',
+    language_code: 'ja',
     name: null,
     preview: null,
     message_count: 0,

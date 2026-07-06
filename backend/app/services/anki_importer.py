@@ -13,6 +13,7 @@ from sqlalchemy import select
 
 from app.db.models import VocabEntry, AnkiDeckConfig
 from app.services.anki_introspect import read_deck_notes
+from app.core.language_profiles import get_language_profile
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ async def import_deck_config(config: AnkiDeckConfig, session: AsyncSession) -> D
     re-syncing updates existing rows instead of creating duplicates.
     """
     notes = read_deck_notes(config.collection_path, config.deck_name)
+    profile = get_language_profile(config.language_code)
 
     imported = 0
     updated = 0
@@ -44,14 +46,11 @@ async def import_deck_config(config: AnkiDeckConfig, session: AsyncSession) -> D
         meaning = strip_html(fields.get(config.meaning_field, "")) if config.meaning_field else ""
         pos = strip_html(fields.get(config.pos_field, "")) if config.pos_field else None
 
-        # Kana-only word: the "kanji" field actually holds kana, so demote it.
-        if kanji and not has_kanji(kanji):
-            if not kana:
-                kana = kanji
-            kanji = ""
-        # No reading mapped but a kanji word exists -> fall back to the word.
-        if not kana and kanji:
-            kana = kanji
+        normalized = profile.normalize_vocab_fields(kanji, kana, meaning, pos)
+        kanji = normalized["term"] or ""
+        kana = normalized["reading"] or ""
+        meaning = normalized["meaning"] or ""
+        pos = normalized["part_of_speech"]
 
         if not kana or "<" in kana or len(kana) > 50:
             skipped += 1
@@ -84,6 +83,7 @@ async def import_deck_config(config: AnkiDeckConfig, session: AsyncSession) -> D
                 source="anki",
                 anki_note_id=note_id,
                 deck_config_id=config.id,
+                language_code=config.language_code,
                 interval_days=note["c_ivl"],
             ))
             imported += 1
@@ -99,10 +99,15 @@ async def import_deck_config(config: AnkiDeckConfig, session: AsyncSession) -> D
     }
 
 
-async def sync_all_decks(session: AsyncSession) -> List[Dict[str, Any]]:
+async def sync_all_decks(
+    session: AsyncSession,
+    language_code: str | None = None,
+) -> List[Dict[str, Any]]:
     """Sync every enabled Anki deck source. Failures are reported per deck and
     never abort the remaining decks."""
     stmt = select(AnkiDeckConfig).where(AnkiDeckConfig.enabled.is_(True))
+    if language_code:
+        stmt = stmt.where(AnkiDeckConfig.language_code == language_code)
     configs = (await session.execute(stmt)).scalars().all()
 
     results: List[Dict[str, Any]] = []
@@ -198,11 +203,15 @@ async def import_from_export_db(
         db_status = map_status(status)
 
         # Check if exists
-        stmt = select(VocabEntry).where(VocabEntry.anki_note_id == note_id)
+        stmt = select(VocabEntry).where(
+            VocabEntry.language_code == "ja",
+            VocabEntry.anki_note_id == note_id,
+        )
         result = await session.execute(stmt)
         existing = result.scalar_one_or_none()
 
         if existing:
+            existing.language_code = "ja"
             existing.kanji = kanji
             existing.kana = kana
             existing.meaning = meaning
@@ -211,6 +220,7 @@ async def import_from_export_db(
             updated += 1
         else:
             entry = VocabEntry(
+                language_code="ja",
                 kanji=kanji,
                 kana=kana,
                 meaning=meaning,
@@ -236,7 +246,12 @@ async def import_anki_collection(
     anki_path: str,
     session: AsyncSession
 ) -> Dict[str, Any]:
-    """Import vocabulary from an Anki collection into the database."""
+    """Import vocabulary from an Anki collection into the database.
+
+    Legacy compatibility path: this predates the deck-config wizard and keeps
+    the old Japanese/WaniKani heuristics intentionally. New language profiles
+    should use AnkiDeckConfig + import_deck_config instead.
+    """
 
     # Check if this is pointing to anki_export.db (pre-parsed)
     anki_path = os.path.expanduser(anki_path)
@@ -325,11 +340,15 @@ async def import_anki_collection(
                 skipped += 1
                 continue
 
-            stmt = select(VocabEntry).where(VocabEntry.anki_note_id == nid)
+            stmt = select(VocabEntry).where(
+                VocabEntry.language_code == "ja",
+                VocabEntry.anki_note_id == nid,
+            )
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
 
             if existing:
+                existing.language_code = "ja"
                 existing.kanji = vocab_info.get("kanji")
                 existing.kana = vocab_info["kana"]
                 existing.meaning = vocab_info["meaning"]
@@ -338,6 +357,7 @@ async def import_anki_collection(
                 updated += 1
             else:
                 entry = VocabEntry(
+                    language_code="ja",
                     kanji=vocab_info.get("kanji"),
                     kana=vocab_info["kana"],
                     meaning=vocab_info["meaning"],
@@ -414,11 +434,8 @@ def map_status(status: str) -> str:
 
 
 def has_kanji(text: str) -> bool:
-    """Check if text contains kanji characters."""
-    for char in text:
-        if '\u4e00' <= char <= '\u9fff':
-            return True
-    return False
+    """Japanese compatibility wrapper for profile script detection."""
+    return get_language_profile("ja").has_term_script(text)
 
 
 def extract_vocab_info(data: Dict[str, str], field_names: list) -> Dict[str, Any]:

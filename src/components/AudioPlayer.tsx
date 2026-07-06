@@ -3,9 +3,16 @@ import React, { useState, useRef, useCallback } from 'react';
 interface AudioPlayerProps {
   text: string;
   speakerId?: number;
+  speechLanguage?: string;
+  languageCode?: string;
 }
 
-export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, speakerId }) => {
+export const AudioPlayer: React.FC<AudioPlayerProps> = ({
+  text,
+  speakerId,
+  speechLanguage = 'ja-JP',
+  languageCode = 'ja',
+}) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +35,14 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, speakerId }) => 
     // Use Web Speech API fallback
     if (speakerId === 0) {
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ja-JP';
-      // Fallback voice selection (find a Japanese voice if available)
+      utterance.lang = speechLanguage;
+      // Fallback voice selection (find a matching target-language voice if available)
       const voices = window.speechSynthesis.getVoices();
-      const jaVoice = voices.find((v) => v.lang.startsWith('ja'));
-      if (jaVoice) {
-        utterance.voice = jaVoice;
+      const languagePrefix = speechLanguage.split('-', 1)[0];
+      const matchingVoice = voices.find((v) => v.lang === speechLanguage)
+        || voices.find((v) => v.lang.startsWith(languagePrefix));
+      if (matchingVoice) {
+        utterance.voice = matchingVoice;
       }
       utterance.onstart = () => {
         setIsPlaying(true);
@@ -63,6 +72,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, speakerId }) => 
         body: JSON.stringify({
           text,
           speaker_id: speakerId,
+          language_code: languageCode,
         }),
       });
 
@@ -105,7 +115,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, speakerId }) => 
       setError(message);
       setIsLoading(false);
     }
-  }, [text, speakerId, isLoading, isPlaying]);
+  }, [text, speakerId, speechLanguage, languageCode, isLoading, isPlaying]);
 
   return (
     <button

@@ -2,35 +2,40 @@ from typing import Optional, List, Dict
 from datetime import date
 import logging
 
-from app.core.agents import TUTOR_SYSTEM_PROMPT_TEMPLATE, LISTENER_SYSTEM_PROMPT_TEMPLATE
+from app.config import get_settings
+from app.core.language_profiles import get_language_profile, normalize_language_code
 
 logger = logging.getLogger(__name__)
 
 
 async def build_tutor_context(
     session_id: str,
-    difficulty_feedback: Optional[str] = None
+    difficulty_feedback: Optional[str] = None,
+    language_code: Optional[str] = None,
 ) -> Dict:
     """Build the context for the Tutor agent (no tools, focused on teaching)."""
+    language_code = await resolve_session_language(session_id, language_code)
+    profile = get_language_profile(language_code)
+
     # Load student facts (long-term memory about the student)
-    student_facts = await fetch_student_facts()
+    student_facts = await fetch_student_facts(language_code)
     student_facts_formatted = format_student_facts(student_facts)
 
     # Load session summary (compacted conversation history)
     session_summary = await get_session_summary(session_id)
 
     # Fetch ALL learning vocabulary (no limit)
-    vocab_list = await fetch_learning_vocab()
+    vocab_list = await fetch_learning_vocab(language_code)
 
     # Format vocab list
-    vocab_formatted = format_vocab_list(vocab_list)
+    vocab_formatted = format_vocab_list(vocab_list, language_code)
 
     # Fetch learning grammar
-    grammar_list = await fetch_learning_grammar()
+    grammar_list = await fetch_learning_grammar(language_code)
     grammar_formatted = format_grammar_list(grammar_list)
 
     # Build system prompt using Tutor template (no tool instructions)
-    system_prompt = TUTOR_SYSTEM_PROMPT_TEMPLATE.format(
+    system_prompt = profile.tutor_prompt_template.format(
         today=date.today().isoformat(),
         student_facts_formatted=student_facts_formatted,
         session_summary=session_summary or "(No previous conversation in this session)",
@@ -50,6 +55,7 @@ async def build_tutor_context(
             "session_summary": session_summary or "",
             "vocab_list": vocab_list,
             "grammar_list": grammar_list,
+            "language_code": language_code,
         },
     }
 
@@ -57,6 +63,7 @@ async def build_tutor_context(
 async def build_listener_context(
     user_message: str,
     tutor_message: str,
+    language_code: Optional[str] = None,
 ) -> Dict:
     """Build the context for the Listener agent (minimal, for fact extraction).
 
@@ -64,16 +71,19 @@ async def build_listener_context(
         user_message: The student's message
         tutor_message: The tutor's previous response (for pronoun resolution)
     """
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
+    profile = get_language_profile(language_code)
+
     # Load current facts with IDs so Listener can reference them for edit/delete
-    student_facts = await fetch_student_facts()
+    student_facts = await fetch_student_facts(language_code)
     student_facts_formatted = format_student_facts(student_facts)
 
     # Load learning grammar with IDs for the Listener to reference
-    learning_grammar = await fetch_learning_grammar()
+    learning_grammar = await fetch_learning_grammar(language_code)
     learning_grammar_formatted = format_grammar_list_with_ids(learning_grammar)
 
     # Build system prompt using Listener template
-    system_prompt = LISTENER_SYSTEM_PROMPT_TEMPLATE.format(
+    system_prompt = profile.listener_prompt_template.format(
         student_facts_formatted=student_facts_formatted,
         learning_grammar_formatted=learning_grammar_formatted,
         tutor_message=tutor_message,
@@ -86,17 +96,39 @@ async def build_listener_context(
     }
 
 
-async def fetch_learning_vocab() -> List[Dict]:
+async def resolve_session_language(
+    session_id: str,
+    fallback_language_code: Optional[str] = None,
+) -> str:
+    """Resolve a session's language, falling back to the active configured profile."""
+    from app.db.database import async_session_maker
+    from app.db.models import ChatSession
+    from sqlalchemy import select
+
+    fallback = normalize_language_code(fallback_language_code or get_settings().target_language_code)
+    try:
+        async with async_session_maker() as session:
+            stmt = select(ChatSession.language_code).where(ChatSession.id == session_id)
+            result = await session.execute(stmt)
+            return normalize_language_code(result.scalar_one_or_none() or fallback)
+    except Exception:
+        return fallback
+
+
+async def fetch_learning_vocab(language_code: Optional[str] = None) -> List[Dict]:
     """Fetch ALL vocabulary words with 'Learning' status."""
     from app.db.database import async_session_maker
     from app.db.models import VocabEntry
-    from sqlalchemy import select
+    from sqlalchemy import select, or_
+
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
 
     try:
         async with async_session_maker() as session:
             stmt = (
                 select(VocabEntry)
                 .where(VocabEntry.status == "Learning")
+                .where(or_(VocabEntry.language_code == language_code, VocabEntry.language_code.is_(None)))
                 .order_by(VocabEntry.updated_at.desc())
             )
             result = await session.execute(stmt)
@@ -104,6 +136,8 @@ async def fetch_learning_vocab() -> List[Dict]:
 
             return [
                 {
+                    "term": e.kanji,
+                    "reading": e.kana,
                     "kanji": e.kanji,
                     "kana": e.kana,
                     "meaning": e.meaning,
@@ -115,30 +149,34 @@ async def fetch_learning_vocab() -> List[Dict]:
         return []
 
 
-def format_vocab_list(vocab_list: List[Dict]) -> str:
+def format_vocab_list(vocab_list: List[Dict], language_code: Optional[str] = None) -> str:
     """Format vocabulary list for the system prompt."""
     if not vocab_list:
         return ""
 
+    profile = get_language_profile(language_code)
     lines = []
     for v in vocab_list:
-        if v["kanji"]:
-            lines.append(f"- {v['kanji']} ({v['kana']})")
-        else:
-            lines.append(f"- {v['kana']}")
+        lines.append(profile.format_vocab_item(v))
 
     return "\n".join(lines)
 
 
-async def fetch_student_facts() -> List[Dict]:
+async def fetch_student_facts(language_code: Optional[str] = None) -> List[Dict]:
     """Fetch all student facts from the database."""
     from app.db.database import async_session_maker
     from app.db.models import StudentFact
-    from sqlalchemy import select
+    from sqlalchemy import select, or_
+
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
 
     try:
         async with async_session_maker() as session:
-            stmt = select(StudentFact).order_by(StudentFact.created_at.asc())
+            stmt = (
+                select(StudentFact)
+                .where(or_(StudentFact.language_code == language_code, StudentFact.language_code.is_(None)))
+                .order_by(StudentFact.created_at.asc())
+            )
             result = await session.execute(stmt)
             facts = result.scalars().all()
             return [{"id": f.id, "content": f.content} for f in facts]
@@ -201,17 +239,20 @@ async def get_chat_history(session_id: str, limit: int = 15) -> List[Dict]:
         return []
 
 
-async def fetch_learning_grammar() -> List[Dict]:
+async def fetch_learning_grammar(language_code: Optional[str] = None) -> List[Dict]:
     """Fetch ALL grammar points with 'Learning' status."""
     from app.db.database import async_session_maker
     from app.db.models import GrammarEntry
-    from sqlalchemy import select
+    from sqlalchemy import select, or_
+
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
 
     try:
         async with async_session_maker() as session:
             stmt = (
                 select(GrammarEntry)
                 .where(GrammarEntry.status == "Learning")
+                .where(or_(GrammarEntry.language_code == language_code, GrammarEntry.language_code.is_(None)))
                 .order_by(GrammarEntry.jlpt_level.asc(), GrammarEntry.updated_at.desc())
             )
             result = await session.execute(stmt)

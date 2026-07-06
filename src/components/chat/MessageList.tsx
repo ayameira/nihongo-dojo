@@ -13,6 +13,8 @@ interface MessageListProps {
   isAtBottom: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   selectedSpeakerId?: number;
+  speechLanguage?: string;
+  languageCode?: string;
   pendingFeedback: DifficultyFeedback | null;
   onDifficultyFeedback: (direction: DifficultyFeedback) => void;
   onJumpToBottom: () => void;
@@ -113,9 +115,11 @@ const UserMessage: React.FC<{ message: Message }> = React.memo(({ message }) => 
 const AssistantMessage: React.FC<{
   message: Message;
   selectedSpeakerId?: number;
+  speechLanguage?: string;
+  languageCode?: string;
   pendingFeedback: DifficultyFeedback | null;
   onDifficultyFeedback: (direction: DifficultyFeedback) => void;
-}> = React.memo(({ message, selectedSpeakerId, pendingFeedback, onDifficultyFeedback }) => {
+}> = React.memo(({ message, selectedSpeakerId, speechLanguage, languageCode, pendingFeedback, onDifficultyFeedback }) => {
   const chunks = message.content
     ? message.content.split(/\n\n+/).filter(chunk => chunk.trim())
     : [];
@@ -132,7 +136,12 @@ const AssistantMessage: React.FC<{
                 </ReactMarkdown>
               </div>
               {message.status === 'complete' && (
-                <AudioPlayer text={chunk} speakerId={selectedSpeakerId} />
+                <AudioPlayer
+                  text={chunk}
+                  speakerId={selectedSpeakerId}
+                  speechLanguage={speechLanguage}
+                  languageCode={languageCode}
+                />
               )}
             </div>
           ))
@@ -167,9 +176,11 @@ const MessageRow: React.FC<{
   message: Message;
   previousMessage?: Message;
   selectedSpeakerId?: number;
+  speechLanguage?: string;
+  languageCode?: string;
   pendingFeedback: DifficultyFeedback | null;
   onDifficultyFeedback: (direction: DifficultyFeedback) => void;
-}> = React.memo(({ message, previousMessage, selectedSpeakerId, pendingFeedback, onDifficultyFeedback }) => (
+}> = React.memo(({ message, previousMessage, selectedSpeakerId, speechLanguage, languageCode, pendingFeedback, onDifficultyFeedback }) => (
   <>
     {shouldShowTimestamp(message, previousMessage) && (
       <div className="timestamp-cluster">
@@ -184,6 +195,8 @@ const MessageRow: React.FC<{
       <AssistantMessage
         message={message}
         selectedSpeakerId={selectedSpeakerId}
+        speechLanguage={speechLanguage}
+        languageCode={languageCode}
         pendingFeedback={pendingFeedback}
         onDifficultyFeedback={onDifficultyFeedback}
       />
@@ -198,6 +211,8 @@ export const MessageList: React.FC<MessageListProps> = React.memo(({
   isAtBottom,
   messagesEndRef,
   selectedSpeakerId,
+  speechLanguage,
+  languageCode,
   pendingFeedback,
   onDifficultyFeedback,
   onJumpToBottom,
@@ -216,6 +231,8 @@ export const MessageList: React.FC<MessageListProps> = React.memo(({
         message={message}
         previousMessage={index > 0 ? messages[index - 1] : undefined}
         selectedSpeakerId={selectedSpeakerId}
+        speechLanguage={speechLanguage}
+        languageCode={languageCode}
         pendingFeedback={pendingFeedback}
         onDifficultyFeedback={onDifficultyFeedback}
       />

@@ -44,6 +44,41 @@ vi.mock('./hooks/useTheme', () => ({
   }),
 }));
 
+vi.mock('./hooks/useLanguageProfiles', () => ({
+  useLanguageProfiles: () => ({
+    profiles: [
+      {
+        code: 'ja',
+        display_name: 'Japanese',
+        native_name: '日本語',
+        speech_language: 'ja-JP',
+        grammar_level_scheme: { name: 'JLPT', levels: ['N5', 'N4', 'N3', 'N2', 'N1'], custom_label: 'Custom', source_name: 'jlpt' },
+        vocabulary_semantics: {
+          term_label: 'term',
+          reading_label: 'reading',
+          meaning_label: 'meaning',
+          part_of_speech_label: 'part of speech',
+        },
+      },
+    ],
+    activeLanguageCode: 'ja',
+    activeProfile: {
+      code: 'ja',
+      display_name: 'Japanese',
+      native_name: '日本語',
+      speech_language: 'ja-JP',
+      grammar_level_scheme: { name: 'JLPT', levels: ['N5', 'N4', 'N3', 'N2', 'N1'], custom_label: 'Custom', source_name: 'jlpt' },
+      vocabulary_semantics: {
+        term_label: 'term',
+        reading_label: 'reading',
+        meaning_label: 'meaning',
+        part_of_speech_label: 'part of speech',
+      },
+    },
+    setActiveLanguageCode: vi.fn(),
+  }),
+}));
+
 vi.mock('./components/VocabSidebar', () => ({
   default: ({
     setupWizardOpen,

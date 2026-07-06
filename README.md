@@ -207,10 +207,15 @@ You do not need Anki to use the chat tutor, but Anki is the feature that makes t
 1. Start Nihongo Dojo.
 2. Open the Vocabulary sidebar.
 3. Click the settings button.
-4. Use the setup wizard to find your `collection.anki2` file.
-5. Select one or more decks.
-6. Confirm the field mapping for word, reading, meaning, and optional part of speech.
-7. Sync.
+4. Click `Connect Anki Deck`.
+5. Choose your Anki `collection.anki2` file.
+6. Select one or more decks.
+7. Review the guessed fields for word, reading, meaning, and optional part of speech.
+8. Import.
+
+Nihongo Dojo uploads a copy of the selected collection to the backend you are running. If you are using the normal local setup, that backend is on your own computer. Avoid uploading a personal Anki collection to someone else's public demo server.
+
+If you prefer paths, the wizard still supports entering the local `collection.anki2` path directly.
 
 Common Anki collection paths:
 

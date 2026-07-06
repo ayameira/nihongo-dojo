@@ -7,15 +7,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.db.models import GrammarEntry
+from app.core.language_profiles import get_language_profile, normalize_language_code
 
 logger = logging.getLogger(__name__)
 
 # Path to grammar list file (relative to backend/ directory)
-GRAMMAR_FILE = Path(__file__).parent.parent.parent.parent / "jlpt_grammar_list.txt"
+GRAMMAR_FILE = get_language_profile("ja").grammar_seed_file
 
 
-async def seed_grammar_from_file(session: AsyncSession, file_path: Path = None) -> dict:
-    """Parse jlpt_grammar_list.txt and seed grammar entries.
+async def seed_grammar_from_file(
+    session: AsyncSession,
+    file_path: Path = None,
+    language_code: str | None = None,
+) -> dict:
+    """Parse the active profile's grammar seed file and seed grammar entries.
 
     Args:
         session: Database session
@@ -24,7 +29,11 @@ async def seed_grammar_from_file(session: AsyncSession, file_path: Path = None) 
     Returns:
         Dict with count of entries inserted
     """
-    path = file_path or GRAMMAR_FILE
+    language_code = normalize_language_code(language_code)
+    profile = get_language_profile(language_code)
+    path = file_path or profile.grammar_seed_file
+    if path is None:
+        return {"count": 0, "error": "no_seed_file"}
 
     if not path.exists():
         logger.warning(f"Grammar file not found: {path}")
@@ -35,10 +44,12 @@ async def seed_grammar_from_file(session: AsyncSession, file_path: Path = None) 
     current_level = None
     count = 0
 
+    level_pattern = "|".join(re.escape(level) for level in profile.grammar_level_scheme.levels)
+
     for line in text.splitlines():
         # Detect level headers (e.g., "N5 LEVEL")
         if "LEVEL" in line:
-            level_match = re.search(r"(N[1-5])", line)
+            level_match = re.search(rf"({level_pattern})", line)
             if level_match:
                 current_level = level_match.group(1)
                 logger.debug(f"Parsing grammar for {current_level}")
@@ -71,10 +82,11 @@ async def seed_grammar_from_file(session: AsyncSession, file_path: Path = None) 
                 continue
 
             entry = GrammarEntry(
+                language_code=language_code,
                 pattern=pattern,
                 meaning=meaning,
                 jlpt_level=current_level,
-                source="jlpt",
+                source=profile.grammar_level_scheme.source_name,
                 status="New",
             )
             session.add(entry)
@@ -85,7 +97,7 @@ async def seed_grammar_from_file(session: AsyncSession, file_path: Path = None) 
     return {"count": count}
 
 
-async def check_and_seed_grammar(session: AsyncSession) -> dict:
+async def check_and_seed_grammar(session: AsyncSession, language_code: str | None = None) -> dict:
     """Check if grammar table is empty and seed if needed.
 
     Args:
@@ -96,14 +108,16 @@ async def check_and_seed_grammar(session: AsyncSession) -> dict:
     """
     from sqlalchemy import func
 
+    language_code = normalize_language_code(language_code)
+
     # Check if table is empty
-    stmt = select(func.count()).select_from(GrammarEntry)
+    stmt = select(func.count()).select_from(GrammarEntry).where(GrammarEntry.language_code == language_code)
     result = await session.execute(stmt)
     count = result.scalar()
 
     if count == 0:
-        logger.info("Grammar table is empty, seeding from JLPT list...")
-        return await seed_grammar_from_file(session)
+        logger.info(f"Grammar table is empty for {language_code}, seeding from profile list...")
+        return await seed_grammar_from_file(session, language_code=language_code)
     else:
         logger.info(f"Grammar table already has {count} entries, skipping seed")
         return {"count": 0, "skipped": True, "existing": count}

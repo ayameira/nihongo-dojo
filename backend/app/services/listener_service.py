@@ -8,7 +8,7 @@ import logging
 from typing import Optional, Dict
 
 from app.config import get_settings, Settings, resolve_provider_settings
-from app.core.context_builder import build_listener_context
+from app.core.context_builder import build_listener_context, resolve_session_language
 from app.core.llm_client import get_llm_client, is_llm_configured
 from app.core.tools import execute_tool_call
 
@@ -48,17 +48,25 @@ class ListenerService:
                 logger.warning("Listener skipped because LLM is not configured")
                 return {"status": "skipped", "reason": "llm_not_configured"}
 
+            language_code = await resolve_session_language(session_id, self.settings.target_language_code)
+
             # Build minimal context for Listener
             context = await build_listener_context(
                 user_message=user_message,
                 tutor_message=tutor_message,
+                language_code=language_code,
             )
+
+            async def execute_session_tool(tool_name, args):
+                if tool_name == "manage_grammar" and "language_code" not in args:
+                    args = {**args, "language_code": language_code}
+                return await execute_tool_call(tool_name, args)
 
             # Initialize configured LLM client and run with tool loop
             client = get_llm_client(llm_settings)
             result = await client.generate_with_tools(
                 context=context,
-                tool_executor=execute_tool_call,
+                tool_executor=execute_session_tool,
             )
 
             tool_calls = result.get("tool_calls", [])

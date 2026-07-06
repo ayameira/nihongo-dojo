@@ -107,6 +107,10 @@ class Settings(BaseSettings):
     anki_collection_path: str = ""
     ai_logs_path: str = "./logs/ai_interactions"
 
+    # Target language profile. Japanese is the default profile and preserves
+    # the app's existing behavior.
+    target_language_code: str = "ja"
+
     # TTS (VOICEVOX)
     voicevox_url: str = "http://127.0.0.1:50021"
     tts_cache_dir: str = "./audio_cache"

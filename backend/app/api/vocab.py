@@ -6,11 +6,14 @@ from datetime import datetime
 
 from app.db.database import get_session
 from app.db.models import VocabEntry
+from app.config import get_settings
+from app.core.language_profiles import normalize_language_code
 
 router = APIRouter()
 
 
 class VocabCreate(BaseModel):
+    language_code: Optional[str] = None
     kanji: Optional[str] = None
     kana: str
     meaning: str
@@ -27,6 +30,7 @@ class VocabUpdate(BaseModel):
 
 class VocabResponse(BaseModel):
     id: int
+    language_code: str
     kanji: Optional[str]
     kana: str
     meaning: str
@@ -47,11 +51,14 @@ async def list_vocab(
     status: Optional[str] = None,
     source: Optional[str] = None,
     search: Optional[str] = None,
+    language_code: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     session=Depends(get_session)
 ):
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
     stmt = select(VocabEntry)
+    stmt = stmt.where(VocabEntry.language_code == language_code)
 
     if status:
         stmt = stmt.where(VocabEntry.status == status)
@@ -85,10 +92,16 @@ async def list_vocab(
 
 
 @router.get("/learning")
-async def get_learning_vocab(limit: int = 50, session=Depends(get_session)):
+async def get_learning_vocab(
+    limit: int = 50,
+    language_code: Optional[str] = None,
+    session=Depends(get_session),
+):
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
     stmt = (
         select(VocabEntry)
         .where(VocabEntry.status == "Learning")
+        .where(VocabEntry.language_code == language_code)
         .order_by(VocabEntry.updated_at.desc())
         .limit(limit)
     )
@@ -98,14 +111,18 @@ async def get_learning_vocab(limit: int = 50, session=Depends(get_session)):
 
 
 @router.get("/stats")
-async def get_vocab_stats(session=Depends(get_session)):
+async def get_vocab_stats(language_code: Optional[str] = None, session=Depends(get_session)):
+    language_code = normalize_language_code(language_code or get_settings().target_language_code)
     stats = {}
     for status in ["New", "Learning", "Mature"]:
-        stmt = select(func.count()).where(VocabEntry.status == status)
+        stmt = select(func.count()).where(
+            VocabEntry.status == status,
+            VocabEntry.language_code == language_code,
+        )
         count = await session.scalar(stmt)
         stats[status.lower()] = count or 0
 
-    total_stmt = select(func.count()).select_from(VocabEntry)
+    total_stmt = select(func.count()).select_from(VocabEntry).where(VocabEntry.language_code == language_code)
     stats["total"] = await session.scalar(total_stmt) or 0
 
     return stats
@@ -124,6 +141,7 @@ async def get_vocab(vocab_id: int, session=Depends(get_session)):
 @router.post("")
 async def create_vocab(data: VocabCreate, session=Depends(get_session)):
     entry = VocabEntry(
+        language_code=normalize_language_code(data.language_code or get_settings().target_language_code),
         kanji=data.kanji,
         kana=data.kana,
         meaning=data.meaning,

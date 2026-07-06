@@ -6,12 +6,15 @@ from datetime import datetime
 
 from app.db.database import get_session
 from app.db.models import ChatSession, ChatMessage
+from app.config import get_settings
+from app.core.language_profiles import normalize_language_code
 
 router = APIRouter()
 
 
 class SessionCreate(BaseModel):
     id: Optional[str] = None
+    language_code: Optional[str] = None
 
 
 class SessionUpdate(BaseModel):
@@ -20,6 +23,7 @@ class SessionUpdate(BaseModel):
 
 class SessionResponse(BaseModel):
     id: str
+    language_code: str
     name: Optional[str]
     preview: Optional[str]
     message_count: int
@@ -48,9 +52,11 @@ async def create_session(
     import secrets
 
     session_id = data.id or f"session_{int(datetime.now().timestamp() * 1000)}_{secrets.token_hex(4)}"
+    language_code = normalize_language_code(data.language_code or get_settings().target_language_code)
 
     chat_session = ChatSession(
         id=session_id,
+        language_code=language_code,
         name=None,
         preview=None,
         message_count=0,

@@ -15,6 +15,7 @@ interface NoteType {
 }
 
 interface DeckFields {
+  language_code: string;
   deck_name: string;
   note_count: number;
   note_types: NoteType[];
@@ -28,6 +29,7 @@ interface DeckFields {
 
 interface DeckConfig {
   id: number;
+  language_code: string;
   name: string;
   collection_path: string;
   deck_name: string;
@@ -53,6 +55,7 @@ interface Mapping {
 }
 
 interface AnkiSetupWizardProps {
+  languageCode?: string;
   onClose: () => void;
   onSynced?: () => void;
 }
@@ -61,7 +64,11 @@ type Step = 'manage' | 'path' | 'mapping' | 'result';
 
 const NONE = '';
 
-export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSynced }) => {
+export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({
+  languageCode = 'ja',
+  onClose,
+  onSynced,
+}) => {
   const [step, setStep] = useState<Step>('manage');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -71,6 +78,7 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
 
   // Path / deck selection
   const [path, setPath] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState('');
   const [decks, setDecks] = useState<DeckInfo[]>([]);
   const [selectedDecks, setSelectedDecks] = useState<Set<string>>(new Set());
 
@@ -81,15 +89,16 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
 
   // Result
   const [result, setResult] = useState<{ imported: number; updated: number; skipped: number } | null>(null);
+  const languageParam = `language_code=${encodeURIComponent(languageCode)}`;
 
   const loadConfigs = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/anki/configs`);
+      const res = await fetch(`${API}/api/anki/configs?${languageParam}`);
       if (res.ok) setConfigs(await res.json());
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [languageParam]);
 
   useEffect(() => {
     loadConfigs();
@@ -100,6 +109,7 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
   const startWizard = async () => {
     setError('');
     setEditingId(null);
+    setUploadedFileName('');
     setSelectedDecks(new Set());
     setDecks([]);
     setDeckFields({});
@@ -113,6 +123,39 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
       }
     } catch {
       /* ignore */
+    }
+  };
+
+  const uploadCollection = async (file: File | null) => {
+    if (!file) return;
+    setBusy(true);
+    setError('');
+    setDecks([]);
+    setSelectedDecks(new Set());
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API}/api/anki/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || 'Could not read that Anki collection.');
+        return;
+      }
+
+      setUploadedFileName(data.filename || file.name);
+      setPath(data.path);
+      setDecks(data.decks || []);
+      if ((data.decks || []).length === 0) {
+        setError('No decks with cards found in this collection.');
+      }
+    } catch {
+      setError('Could not reach the server.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -154,7 +197,7 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
       const maps: Record<string, Mapping> = {};
       for (const deck of selectedDecks) {
         const res = await fetch(
-          `${API}/api/anki/deck-fields?path=${encodeURIComponent(path.trim())}&deck=${encodeURIComponent(deck)}`
+          `${API}/api/anki/deck-fields?path=${encodeURIComponent(path.trim())}&deck=${encodeURIComponent(deck)}&${languageParam}`
         );
         const data: DeckFields = await res.json();
         if (!res.ok) {
@@ -212,6 +255,7 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
         const m = mappings[deck];
         const body = {
           name: m.name.trim(),
+          language_code: languageCode,
           collection_path: path.trim(),
           deck_name: deck,
           enabled: true,
@@ -271,11 +315,13 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
   const editConfig = (config: DeckConfig) => {
     setEditingId(config.id);
     setPath(config.collection_path);
+    setUploadedFileName('');
     setSelectedDecks(new Set([config.deck_name]));
     setBusy(true);
     setError('');
     fetch(
       `${API}/api/anki/deck-fields?path=${encodeURIComponent(config.collection_path)}&deck=${encodeURIComponent(config.deck_name)}`
+      + `&${languageParam}`
     )
       .then(async (res) => {
         const data: DeckFields = await res.json();
@@ -335,7 +381,7 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
   const syncAll = async () => {
     setBusy(true);
     try {
-      await fetch(`${API}/api/anki/sync`, { method: 'POST' });
+      await fetch(`${API}/api/anki/sync?${languageParam}`, { method: 'POST' });
       await loadConfigs();
       onSynced?.();
     } finally {
@@ -372,10 +418,10 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-paper-dark">
           <h3 className="text-lg font-bold text-ink">
-            {step === 'manage' && 'Anki Deck Sources'}
-            {step === 'path' && (editingId ? 'Edit Deck Source' : 'Add Deck Source — Choose Decks')}
-            {step === 'mapping' && (editingId ? 'Edit Field Mapping' : 'Map Deck Fields')}
-            {step === 'result' && 'Sync Complete'}
+            {step === 'manage' && 'Anki Vocabulary'}
+            {step === 'path' && (editingId ? 'Edit Anki Deck' : 'Connect Anki Deck')}
+            {step === 'mapping' && (editingId ? 'Edit Field Matching' : 'Review Field Matching')}
+            {step === 'result' && 'Import Complete'}
           </h3>
           <button onClick={onClose} className="text-ink-muted hover:text-ink" title="Close">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -396,8 +442,11 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
           {step === 'manage' && (
             <div>
               {configs.length === 0 ? (
-                <div className="text-center py-8 text-ink-muted text-sm">
-                  No Anki decks connected yet. Add a deck source to import your vocabulary.
+                <div className="text-center py-8">
+                  <div className="text-ink font-medium">No Anki decks connected yet.</div>
+                  <div className="text-ink-muted text-sm mt-1">
+                    Choose your Anki collection file and Nihongo Dojo will pull in the decks you select.
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -454,33 +503,73 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
 
           {/* ---- Path / deck selection ---- */}
           {step === 'path' && (
-            <div>
-              <label className="block text-sm font-medium text-ink-light mb-1">
-                Anki Collection Path
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="~/Library/Application Support/Anki2/User 1/collection.anki2"
-                  className="flex-1 px-3 py-2 text-sm border border-paper-dark rounded-lg bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-vermillion"
-                />
-                <button
-                  onClick={findDecks}
-                  disabled={busy || !path.trim()}
-                  className="px-4 py-2 text-sm rounded-lg bg-paper-dark hover:bg-paper-warm text-ink disabled:opacity-50"
-                >
-                  {busy ? '...' : 'Find Decks'}
-                </button>
+            <div className="space-y-5">
+              {!editingId && (
+                <div className="rounded-lg border border-paper-dark bg-paper-warm p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-ink">Choose your Anki collection</div>
+                      <div className="text-xs text-ink-muted mt-1">
+                        Usually named <span className="font-mono">collection.anki2</span>.
+                      </div>
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-vermillion px-4 py-2 text-sm font-medium text-white hover:bg-vermillion-soft">
+                      {busy ? 'Reading...' : 'Choose File'}
+                      <input
+                        type="file"
+                        accept=".anki2"
+                        className="sr-only"
+                        disabled={busy}
+                        onChange={(e) => {
+                          uploadCollection(e.currentTarget.files?.[0] || null);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {uploadedFileName && (
+                    <div className="mt-3 text-xs text-ink-muted">
+                      Ready: <span className="text-ink">{uploadedFileName}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="block text-sm font-medium text-ink-light">
+                    {editingId ? 'Anki Collection Path' : 'Advanced: use a local path'}
+                  </label>
+                  {!editingId && (
+                    <span className="text-[11px] uppercase tracking-wide text-ink-muted">optional</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={path}
+                    onChange={(e) => {
+                      setPath(e.target.value);
+                      setUploadedFileName('');
+                    }}
+                    placeholder="~/Library/Application Support/Anki2/User 1/collection.anki2"
+                    className="flex-1 px-3 py-2 text-sm border border-paper-dark rounded-lg bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-vermillion"
+                  />
+                  <button
+                    onClick={findDecks}
+                    disabled={busy || !path.trim()}
+                    className="px-4 py-2 text-sm rounded-lg bg-paper-dark hover:bg-paper-warm text-ink disabled:opacity-50"
+                  >
+                    {busy ? '...' : 'Find Decks'}
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-ink-muted">
+                  This works best when Nihongo Dojo is running on the same computer as Anki.
+                </p>
               </div>
-              <p className="mt-1 text-xs text-ink-muted">
-                Each deck source can point at its own collection file — useful if you keep multiple
-                Anki profiles.
-              </p>
 
               {decks.length > 0 && (
-                <div className="mt-4">
+                <div>
                   <div className="text-sm font-medium text-ink-light mb-2">
                     Select decks to import ({selectedDecks.size} selected)
                   </div>
@@ -643,7 +732,7 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
                 onClick={startWizard}
                 className="px-4 py-2 text-sm rounded-lg bg-vermillion hover:bg-vermillion-soft text-white font-medium"
               >
-                + Add Deck Source
+                {configs.length === 0 ? 'Connect Anki Deck' : '+ Add Another Deck'}
               </button>
             </>
           )}
@@ -661,7 +750,7 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
                 disabled={busy || selectedDecks.size === 0}
                 className="px-4 py-2 text-sm rounded-lg bg-vermillion hover:bg-vermillion-soft text-white font-medium disabled:opacity-50"
               >
-                {busy ? 'Loading...' : `Next: Map Fields`}
+                {busy ? 'Loading...' : 'Next: Review Fields'}
               </button>
             </>
           )}
@@ -679,7 +768,7 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({ onClose, onSyn
                 disabled={busy || !allMappingsValid()}
                 className="px-4 py-2 text-sm rounded-lg bg-vermillion hover:bg-vermillion-soft text-white font-medium disabled:opacity-50"
               >
-                {busy ? 'Saving...' : editingId ? 'Save & Sync' : 'Import & Sync'}
+                {busy ? 'Saving...' : editingId ? 'Save & Sync' : 'Import Vocabulary'}
               </button>
             </>
           )}

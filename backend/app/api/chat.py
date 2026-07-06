@@ -8,6 +8,7 @@ import logging
 
 from app.db.database import get_session
 from app.config import get_available_models, get_settings, resolve_provider_settings
+from app.core.language_profiles import get_language_profile, normalize_language_code
 from app.core.llm_client import get_llm_client, is_llm_configured, missing_llm_message
 
 router = APIRouter()
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 async def generate_session_title(
     session_id: str,
     first_message: str,
+    language_code: Optional[str] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
 ):
@@ -41,18 +43,9 @@ async def generate_session_title(
 
         # Truncate message for prompt efficiency
         message_preview = first_message[:500] if len(first_message) > 500 else first_message
+        profile = get_language_profile(language_code)
 
-        prompt = f"""Generate a very short title (3-6 words) for a Japanese learning chat session that starts with this message:
-
-"{message_preview}"
-
-The title should:
-- Be in English
-- Capture the main topic or question
-- Be concise and descriptive
-- Not include quotes or punctuation at the end
-
-Return JSON: {{"title": "your title here"}}"""
+        prompt = profile.session_title_prompt_template.format(message_preview=message_preview)
 
         result = await client.generate_json(prompt)
         title = result.get("result", {}).get("title", "").strip()
@@ -83,6 +76,7 @@ class ChatRequest(BaseModel):
     difficulty_feedback: Optional[str] = None  # 'too_hard' | 'too_easy'
     model: Optional[str] = None
     provider: Optional[str] = None
+    language_code: Optional[str] = None
 
 
 async def generate_stream(request: ChatRequest, settings, background_tasks: BackgroundTasks):
@@ -113,13 +107,37 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
         client = get_llm_client(chat_settings)
         chat_model = chat_settings.llm_model
 
-        # Build context for Tutor agent (no tool instructions)
-        context = await build_tutor_context(request.session_id, request.difficulty_feedback)
-
         # Prepare message parts
         parts = [request.message]
         if request.image_data:
             parts.append({"mime_type": "image/jpeg", "data": request.image_data})
+
+        request_language_code = normalize_language_code(
+            request.language_code or settings.target_language_code
+        )
+        is_first_message = False
+
+        # Resolve the language for this conversation. Existing sessions keep
+        # their original profile; brand-new virtual sessions use the active
+        # language sent by the frontend.
+        async with async_session_maker() as session:
+            stmt = select(ChatSession).where(ChatSession.id == request.session_id)
+            result = await session.execute(stmt)
+            chat_session = result.scalar_one_or_none()
+            if chat_session:
+                language_code = normalize_language_code(chat_session.language_code)
+                if not chat_session.preview and request.message:
+                    is_first_message = True
+            else:
+                language_code = request_language_code
+                is_first_message = True
+
+        # Build context for Tutor agent (no tool instructions)
+        context = await build_tutor_context(
+            request.session_id,
+            request.difficulty_feedback,
+            language_code=language_code,
+        )
 
         # Stream response from Tutor agent (no tools)
         full_response = ""
@@ -142,26 +160,24 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
             elif chunk["type"] == "usage":
                 usage_data = chunk
 
-        # Save to database
+        # Save messages and session metadata to database
         async with async_session_maker() as session:
-            # Get or create ChatSession
             stmt = select(ChatSession).where(ChatSession.id == request.session_id)
             result = await session.execute(stmt)
             chat_session = result.scalar_one_or_none()
 
-            is_first_message = False
             if not chat_session:
-                # Create new session with preview from first message
-                preview = request.message[:100] if request.message else None
+                # The session was deleted while the LLM was responding. Recreate
+                # it with the resolved language so the message save can complete.
                 chat_session = ChatSession(
                     id=request.session_id,
-                    preview=preview,
+                    language_code=language_code,
+                    preview=request.message[:100] if request.message else None,
                     message_count=0,
                 )
                 session.add(chat_session)
-                is_first_message = True
-            elif not chat_session.preview and request.message:
-                # Set preview if this is the first message in an existing session
+
+            if not chat_session.preview and request.message:
                 chat_session.preview = request.message[:100]
                 is_first_message = True
 
@@ -226,6 +242,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
                     run_grammar_assessment,
                     chat_settings.llm_provider,
                     chat_model,
+                    language_code,
                 )
 
             # Generate title for new sessions
@@ -234,6 +251,7 @@ async def generate_stream(request: ChatRequest, settings, background_tasks: Back
                     generate_session_title,
                     request.session_id,
                     request.message,
+                    language_code,
                     chat_settings.llm_provider,
                     chat_model,
                 )

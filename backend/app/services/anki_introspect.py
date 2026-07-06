@@ -13,13 +13,16 @@ import logging
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional
 
+from app.core.language_profiles import get_language_profile, normalize_language_code
+
 logger = logging.getLogger(__name__)
 
 # Field-name heuristics, ordered by preference. Re-used to pre-fill the wizard.
-KANJI_FIELD_HINTS = ["characters", "vocab", "word", "expression", "kanji", "front", "japanese", "sentence"]
-KANA_FIELD_HINTS = ["reading", "reading_whitelist", "kana", "hiragana", "furigana", "pronunciation"]
-MEANING_FIELD_HINTS = ["meaning", "meaning_whitelist", "english", "definition", "translation", "back", "gloss"]
-POS_FIELD_HINTS = ["pos", "part_of_speech", "speech_type", "word_type", "type"]
+_JAPANESE_HINTS = get_language_profile("ja").anki_field_hints
+KANJI_FIELD_HINTS = _JAPANESE_HINTS.term
+KANA_FIELD_HINTS = _JAPANESE_HINTS.reading
+MEANING_FIELD_HINTS = _JAPANESE_HINTS.meaning
+POS_FIELD_HINTS = _JAPANESE_HINTS.part_of_speech
 
 
 def default_collection_path() -> str:
@@ -186,84 +189,26 @@ def _is_mostly_latin(text: str) -> bool:
     return latin / len(letters) > 0.6
 
 
-def suggest_mapping(field_names: List[str], samples: Dict[str, List[str]]) -> Dict[str, Optional[str]]:
+def suggest_mapping(
+    field_names: List[str],
+    samples: Dict[str, List[str]],
+    language_code: str | None = None,
+) -> Dict[str, Optional[str]]:
     """Best-guess field mapping from field names plus a few sample values.
 
     Names are matched against the hint lists first; if that is inconclusive the
     sample content is sniffed (kanji vs. kana vs. latin text).
     """
-    def by_name(hints: List[str]) -> Optional[str]:
-        for hint in hints:
-            for name in field_names:
-                if hint == name.lower().replace(" ", "_"):
-                    return name
-        for hint in hints:
-            for name in field_names:
-                if hint in name.lower().replace(" ", "_"):
-                    return name
-        return None
-
-    suggestion: Dict[str, Optional[str]] = {
-        "kanji_field": by_name(KANJI_FIELD_HINTS),
-        "kana_field": by_name(KANA_FIELD_HINTS),
-        "meaning_field": by_name(MEANING_FIELD_HINTS),
-        "pos_field": by_name(POS_FIELD_HINTS),
-    }
-
-    # Content sniffing to fill any gaps the name heuristics missed.
-    profiles: Dict[str, Dict[str, float]] = {}
-    for name in field_names:
-        values = [_strip_html(v) for v in samples.get(name, []) if _strip_html(v)]
-        if not values:
-            profiles[name] = {"kanji": 0, "kana": 0, "latin": 0}
-            continue
-        profiles[name] = {
-            "kanji": sum(_has_kanji(v) for v in values) / len(values),
-            "kana": sum(_has_kana(v) for v in values) / len(values),
-            "latin": sum(_is_mostly_latin(v) for v in values) / len(values),
-        }
-
-    taken = {v for v in suggestion.values() if v}
-
-    if not suggestion["meaning_field"]:
-        best = max(
-            (n for n in field_names if n not in taken),
-            key=lambda n: profiles[n]["latin"],
-            default=None,
-        )
-        if best and profiles[best]["latin"] > 0.5:
-            suggestion["meaning_field"] = best
-            taken.add(best)
-
-    if not suggestion["kanji_field"]:
-        best = max(
-            (n for n in field_names if n not in taken),
-            key=lambda n: profiles[n]["kanji"],
-            default=None,
-        )
-        if best and profiles[best]["kanji"] > 0.3:
-            suggestion["kanji_field"] = best
-            taken.add(best)
-
-    if not suggestion["kana_field"]:
-        best = max(
-            (n for n in field_names if n not in taken),
-            key=lambda n: profiles[n]["kana"] - profiles[n]["kanji"],
-            default=None,
-        )
-        if best and profiles[best]["kana"] > 0.3:
-            suggestion["kana_field"] = best
-            taken.add(best)
-
-    # A deck may be kana-only (no kanji field). In that case the kana field can
-    # fall back to whatever holds the Japanese word.
-    if not suggestion["kana_field"] and suggestion["kanji_field"]:
-        suggestion["kana_field"] = suggestion["kanji_field"]
-
-    return suggestion
+    profile = get_language_profile(language_code)
+    return profile.suggest_anki_mapping(field_names, samples)
 
 
-def get_deck_fields(path: str, deck_name: str, sample_size: int = 8) -> Dict[str, Any]:
+def get_deck_fields(
+    path: str,
+    deck_name: str,
+    sample_size: int = 8,
+    language_code: str | None = None,
+) -> Dict[str, Any]:
     """Inspect a deck's note types, their fields, sample values and a suggested
     field mapping for the wizard's mapping step."""
     notes = read_deck_notes(path, deck_name)
@@ -298,10 +243,11 @@ def get_deck_fields(path: str, deck_name: str, sample_size: int = 8) -> Dict[str
     for row in dominant["samples"]:
         for name, val in row.items():
             dom_samples[name].append(val)
-    suggested = suggest_mapping(dominant["fields"], dom_samples)
+    suggested = suggest_mapping(dominant["fields"], dom_samples, language_code)
 
     return {
         "deck_name": deck_name,
+        "language_code": normalize_language_code(language_code),
         "note_count": len(notes),
         "note_types": note_types,
         "suggested": suggested,

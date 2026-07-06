@@ -72,6 +72,7 @@ describe('useSessions', () => {
     it('creates new session and switches to it', async () => {
       const newSession = {
         id: 'new_session',
+        language_code: 'ja',
         name: null,
         preview: null,
         message_count: 0,
@@ -103,6 +104,45 @@ describe('useSessions', () => {
       expect(newId).toMatch(/^session_\d+_/);
       expect(result.current.currentSessionId).toBe(newId);
       expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_session_id', newId);
+    });
+
+    it('sends the active target language when creating a session', async () => {
+      const fetchSpy = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve([]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            id: 'new_session',
+            language_code: 'ja',
+            name: null,
+            preview: null,
+            message_count: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }),
+        });
+      global.fetch = fetchSpy;
+
+      const { result } = renderHook(() => useSessions('ja'));
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.createSession();
+      });
+
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        expect.stringContaining('/api/sessions'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"language_code":"ja"'),
+        }),
+      );
     });
   });
 
