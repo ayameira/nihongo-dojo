@@ -84,6 +84,8 @@ async def get_languages():
             "display_name": profile.display_name,
             "native_name": profile.native_name,
             "speech_language": profile.speech_language,
+            "supports_server_tts": profile.supports_server_tts,
+            "has_secondary_script": profile.has_secondary_script,
             "grammar_level_scheme": {
                 "name": profile.grammar_level_scheme.name,
                 "levels": profile.grammar_level_scheme.levels,

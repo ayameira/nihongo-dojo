@@ -72,14 +72,25 @@ class TestCreateSession:
 
     @pytest.mark.asyncio
     async def test_unknown_session_language_falls_back_to_japanese(self, test_client):
-        """Until another profile exists, unknown language codes normalize to Japanese."""
+        """Unknown language codes normalize to Japanese."""
         response = await test_client.post(
             "/api/sessions",
-            json={"id": "fallback_language_session", "language_code": "es"},
+            json={"id": "fallback_language_session", "language_code": "xx"},
         )
 
         assert response.status_code == 200
         assert response.json()["language_code"] == "ja"
+
+    @pytest.mark.asyncio
+    async def test_session_keeps_registered_language(self, test_client):
+        """Registered non-Japanese profiles are stored as-is."""
+        response = await test_client.post(
+            "/api/sessions",
+            json={"id": "spanish_session", "language_code": "es"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["language_code"] == "es"
 
     @pytest.mark.asyncio
     async def test_session_has_timestamps(self, test_client):

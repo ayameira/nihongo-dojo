@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLanguageProfiles } from '../hooks/useLanguageProfiles';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -72,6 +73,20 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({
   const [step, setStep] = useState<Step>('manage');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Field labels follow the active language profile; Japanese keeps its
+  // original wording, and languages without a secondary script hide the
+  // term column entirely (the word is stored in the reading slot).
+  const { profiles } = useLanguageProfiles();
+  const languageProfile = profiles.find((p) => p.code === languageCode) || null;
+  const showTermField = languageProfile?.has_secondary_script ?? true;
+  const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+  const termFieldLabel = languageProfile && languageProfile.code !== 'ja'
+    ? `${capitalize(languageProfile.vocabulary_semantics.term_label)} field`
+    : 'Word / Kanji field';
+  const readingFieldLabel = languageProfile && languageProfile.code !== 'ja'
+    ? `${capitalize(languageProfile.vocabulary_semantics.reading_label)} field`
+    : 'Reading / Kana field';
 
   // Manage view
   const [configs, setConfigs] = useState<DeckConfig[]>([]);
@@ -624,13 +639,15 @@ export const AnkiSetupWizard: React.FC<AnkiSetupWizardProps> = ({
                           className="w-full px-2 py-1.5 text-sm border border-paper-dark rounded-lg bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-vermillion"
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs text-ink-muted mb-1">Word / Kanji field</label>
-                        {fieldSelect(deck, m.kanji_field, (v) => updateMapping(deck, { kanji_field: v }), true)}
-                      </div>
+                      {showTermField && (
+                        <div>
+                          <label className="block text-xs text-ink-muted mb-1">{termFieldLabel}</label>
+                          {fieldSelect(deck, m.kanji_field, (v) => updateMapping(deck, { kanji_field: v }), true)}
+                        </div>
+                      )}
                       <div>
                         <label className="block text-xs text-ink-muted mb-1">
-                          Reading / Kana field <span className="text-vermillion">*</span>
+                          {readingFieldLabel} <span className="text-vermillion">*</span>
                         </label>
                         {fieldSelect(deck, m.kana_field, (v) => updateMapping(deck, { kana_field: v }), false)}
                       </div>

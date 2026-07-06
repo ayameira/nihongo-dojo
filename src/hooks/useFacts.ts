@@ -4,6 +4,7 @@ export interface Fact {
   id: number;
   content: string;
   source: string;
+  language_code?: string | null;
   created_at: string | null;
 }
 
@@ -16,13 +17,14 @@ interface UseFactsReturn {
   refreshFacts: () => Promise<void>;
 }
 
-export function useFacts(): UseFactsReturn {
+export function useFacts(languageCode?: string): UseFactsReturn {
   const [facts, setFacts] = useState<Fact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchFacts = useCallback(async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/notes/facts');
+      const languageParam = languageCode ? `?language_code=${encodeURIComponent(languageCode)}` : '';
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/notes/facts${languageParam}`);
       if (response.ok) {
         const data = await response.json();
         setFacts(data.facts);
@@ -30,7 +32,7 @@ export function useFacts(): UseFactsReturn {
     } catch (error) {
       console.error('Failed to fetch facts:', error);
     }
-  }, []);
+  }, [languageCode]);
 
   useEffect(() => {
     const init = async () => {

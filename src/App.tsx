@@ -98,7 +98,7 @@ function App() {
     updateFact,
     deleteFact,
     refreshFacts,
-  } = useFacts();
+  } = useFacts(sessionLanguageCode);
 
   // Initialize theme (applies dark class to html element)
   useTheme();
@@ -204,6 +204,11 @@ function App() {
   }, []);
 
   const prepareTutorialStep = useCallback((step: TutorialStepId) => {
+    if (step === 'language') {
+      setCurrentView('chat');
+      return;
+    }
+
     if (step === 'decks') {
       setSidebarCollapsed(false);
       setShowAnkiSetup(false);
@@ -319,6 +324,7 @@ function App() {
           onSpeakerChange={setSelectedSpeakerId}
           ttsError={ttsError}
           onTutorialClick={() => setShowFirstRunTutorial(true)}
+          languageCode={sessionLanguageCode}
         />
       </div>
 
@@ -332,6 +338,9 @@ function App() {
         isOpen={showFirstRunTutorial}
         onFinish={finishTutorial}
         onStepChange={prepareTutorialStep}
+        languageProfiles={profiles}
+        activeLanguageCode={activeLanguageCode}
+        onLanguageChange={setActiveLanguageCode}
       />
     </div>
   );

@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type { LanguageProfile } from '../hooks/useLanguageProfiles';
 
-export type TutorialStepId = 'decks' | 'chat' | 'profile' | 'grammar';
+export type TutorialStepId = 'language' | 'decks' | 'chat' | 'profile' | 'grammar';
 type TutorialMode = 'spotlight' | 'docked';
 
 interface TutorialStep {
@@ -17,6 +18,9 @@ interface FirstRunTutorialProps {
   isOpen: boolean;
   onFinish: () => void;
   onStepChange?: (step: TutorialStepId) => void;
+  languageProfiles?: LanguageProfile[];
+  activeLanguageCode?: string;
+  onLanguageChange?: (code: string) => void;
 }
 
 interface TargetBox {
@@ -28,7 +32,20 @@ interface TargetBox {
 
 const SPOTLIGHT_PADDING = 8;
 
-const steps: TutorialStep[] = [
+const languageStep: TutorialStep = {
+  id: 'language',
+  eyebrow: 'Step 1',
+  title: 'Choose Your Language',
+  lead: 'Pick the language you want to practice. Everything in the app follows this choice.',
+  points: [
+    'Vocabulary, grammar, and chat sessions are kept separate per language.',
+    'You can switch anytime with the highlighted language selector in the chat header.',
+  ],
+  targetLabel: 'Language selector',
+  targetSelector: '[data-tutorial-target="language-select"]',
+};
+
+const baseSteps: TutorialStep[] = [
   {
     id: 'decks',
     eyebrow: 'Step 1',
@@ -36,7 +53,7 @@ const steps: TutorialStep[] = [
     lead: 'Nihongo Dojo learns from the vocabulary you already review in Anki.',
     points: [
       'Click the highlighted settings button in the vocabulary sidebar.',
-      'Choose the Anki collection file, select decks, then map reading and meaning fields.',
+      'Choose the Anki collection file, select decks, then map word and meaning fields.',
       'After sync, words appear as New, Learning, or Mature so the tutor can aim practice at the right level.',
     ],
     targetLabel: 'Vocabulary settings',
@@ -46,7 +63,7 @@ const steps: TutorialStep[] = [
     id: 'chat',
     eyebrow: 'Step 2',
     title: 'Chat With The Tutor',
-    lead: 'Use the chat like a practice room: ask questions, answer prompts, paste Japanese, or attach an image.',
+    lead: 'Use the chat like a practice room: ask questions, answer prompts, paste text in your target language, or attach an image.',
     points: [
       'Click into the highlighted message box to start a practice turn.',
       'The tutor uses your synced vocabulary and profile to choose useful examples.',
@@ -75,7 +92,7 @@ const steps: TutorialStep[] = [
     lead: 'Grammar points are reusable sentence patterns, not just isolated words.',
     points: [
       'Click the highlighted Grammar button in the left sidebar.',
-      'The Grammar Tree groups points by JLPT level and status: New, Learning, or Burned.',
+      'The Grammar Tree groups points by level and status: New, Learning, or Burned.',
     ],
     targetLabel: 'Grammar tree button',
     targetSelector: '[data-tutorial-target="grammar-tree"]',
@@ -88,10 +105,19 @@ export const FirstRunTutorial: React.FC<FirstRunTutorialProps> = ({
   isOpen,
   onFinish,
   onStepChange,
+  languageProfiles = [],
+  activeLanguageCode = 'ja',
+  onLanguageChange,
 }) => {
   const [stepIndex, setStepIndex] = useState(0);
   const [targetBox, setTargetBox] = useState<TargetBox | null>(null);
   const [mode, setMode] = useState<TutorialMode>('spotlight');
+
+  const showLanguageStep = languageProfiles.length > 1 && !!onLanguageChange;
+  const steps = useMemo(() => {
+    const list = showLanguageStep ? [languageStep, ...baseSteps] : baseSteps;
+    return list.map((step, index) => ({ ...step, eyebrow: `Step ${index + 1}` }));
+  }, [showLanguageStep]);
 
   const currentStep = steps[stepIndex];
   const isFirstStep = stepIndex === 0;
@@ -101,7 +127,7 @@ export const FirstRunTutorial: React.FC<FirstRunTutorialProps> = ({
   const goToStep = useCallback((index: number) => {
     setStepIndex(clamp(index, 0, steps.length - 1));
     setMode('spotlight');
-  }, []);
+  }, [steps.length]);
 
   const goToNextStep = useCallback(() => {
     if (isLastStep) {
@@ -248,6 +274,23 @@ export const FirstRunTutorial: React.FC<FirstRunTutorialProps> = ({
 
         <h2 id="tutorial-title" className="tutorial-title">{currentStep.title}</h2>
         <p className="tutorial-lead">{currentStep.lead}</p>
+        {currentStep.id === 'language' && showLanguageStep && (
+          <label className="block my-3">
+            <span className="block text-xs text-ink-muted mb-1">Practice language</span>
+            <select
+              aria-label="Practice language"
+              value={activeLanguageCode}
+              onChange={(event) => onLanguageChange?.(event.target.value)}
+              className="w-full px-3 py-2 bg-paper-warm border border-paper-dark rounded-lg text-ink focus:outline-none focus:border-vermillion"
+            >
+              {languageProfiles.map((profile) => (
+                <option key={profile.code} value={profile.code}>
+                  {profile.display_name} · {profile.native_name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {mode === 'docked' && (
           <p className="tutorial-docked-note">
             Keep using the app here. The guide will wait while you finish this step.

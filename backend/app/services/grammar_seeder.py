@@ -121,3 +121,19 @@ async def check_and_seed_grammar(session: AsyncSession, language_code: str | Non
     else:
         logger.info(f"Grammar table already has {count} entries, skipping seed")
         return {"count": 0, "skipped": True, "existing": count}
+
+
+async def check_and_seed_all_grammar(session: AsyncSession) -> dict:
+    """Seed every language profile that ships a grammar seed file and has no
+    grammar rows yet. Languages without a seed file start empty and grow
+    through the tutor's manage_grammar tool."""
+    from app.core.language_profiles import list_language_profiles
+
+    total = 0
+    for profile in list_language_profiles():
+        if profile.grammar_seed_file is None:
+            continue
+        result = await check_and_seed_grammar(session, language_code=profile.code)
+        total += result.get("count", 0)
+
+    return {"count": total}

@@ -133,6 +133,63 @@ describe('FirstRunTutorial', () => {
     expect(defaultProps.onFinish).not.toHaveBeenCalled();
   });
 
+  it('adds a language picker step when multiple profiles exist', async () => {
+    const user = userEvent.setup();
+    const onLanguageChange = vi.fn();
+    const profiles = [
+      {
+        code: 'ja',
+        display_name: 'Japanese',
+        native_name: '日本語',
+        speech_language: 'ja-JP',
+        grammar_level_scheme: { name: 'JLPT', levels: ['N5'], custom_label: 'Custom', source_name: 'jlpt' },
+        vocabulary_semantics: {
+          term_label: 'term',
+          reading_label: 'reading',
+          meaning_label: 'meaning',
+          part_of_speech_label: 'part of speech',
+        },
+      },
+      {
+        code: 'es',
+        display_name: 'Spanish',
+        native_name: 'Español',
+        speech_language: 'es-ES',
+        grammar_level_scheme: { name: 'CEFR', levels: ['A1'], custom_label: 'Custom', source_name: 'cefr' },
+        vocabulary_semantics: {
+          term_label: 'word',
+          reading_label: 'word',
+          meaning_label: 'meaning',
+          part_of_speech_label: 'part of speech',
+        },
+      },
+    ];
+
+    render(
+      <FirstRunTutorial
+        {...defaultProps}
+        languageProfiles={profiles}
+        activeLanguageCode="ja"
+        onLanguageChange={onLanguageChange}
+      />
+    );
+
+    expect(screen.getByText('Choose Your Language')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Practice language'), 'es');
+    expect(onLanguageChange).toHaveBeenCalledWith('es');
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Connect Your Decks')).toBeInTheDocument();
+  });
+
+  it('skips the language step with a single profile', () => {
+    render(<FirstRunTutorial {...defaultProps} />);
+
+    expect(screen.queryByText('Choose Your Language')).not.toBeInTheDocument();
+    expect(screen.getByText('Connect Your Decks')).toBeInTheDocument();
+  });
+
   it('finishes when closed or dismissed with Escape', async () => {
     const user = userEvent.setup();
     render(<FirstRunTutorial {...defaultProps} />);

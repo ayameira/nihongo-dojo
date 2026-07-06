@@ -113,7 +113,7 @@ class GrammarEntry(Base):
     language_code = Column(String(10), default="ja", nullable=False, index=True)
     pattern = Column(String(200), nullable=False)  # e.g. "ている", "が 1"
     meaning = Column(Text, nullable=False)  # English meaning
-    jlpt_level = Column(String(5), nullable=True)  # "N5"-"N1", null for custom
+    jlpt_level = Column(String(20), nullable=True)  # profile grammar level ("N5", "A1", "TOPIK1", ...), null for custom
     status = Column(String(20), default="New")  # "New" | "Learning" | "Burned"
     source = Column(String(20), default="jlpt")  # "jlpt" | "manual" | "tutor"
     notes = Column(Text, nullable=True)  # Usage notes from user/AI

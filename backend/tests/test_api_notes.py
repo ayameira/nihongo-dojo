@@ -123,6 +123,44 @@ class TestUpdateFact:
         assert response.status_code == 404
 
 
+class TestFactsLanguageFilter:
+    """Tests for language_code filtering on GET /api/notes/facts."""
+
+    @pytest.mark.asyncio
+    async def test_returns_language_scoped_and_global_facts(self, test_client: AsyncClient, async_session):
+        from app.db.models import StudentFact
+
+        async_session.add_all([
+            StudentFact(content="Global fact", source="manual"),
+            StudentFact(content="Japanese fact", source="listener", language_code="ja"),
+            StudentFact(content="Spanish fact", source="listener", language_code="es"),
+        ])
+        await async_session.commit()
+
+        response = await test_client.get("/api/notes/facts", params={"language_code": "es"})
+
+        assert response.status_code == 200
+        contents = [f["content"] for f in response.json()["facts"]]
+        assert "Global fact" in contents
+        assert "Spanish fact" in contents
+        assert "Japanese fact" not in contents
+
+    @pytest.mark.asyncio
+    async def test_no_filter_returns_all_facts(self, test_client: AsyncClient, async_session):
+        from app.db.models import StudentFact
+
+        async_session.add_all([
+            StudentFact(content="Global fact", source="manual"),
+            StudentFact(content="Spanish fact", source="listener", language_code="es"),
+        ])
+        await async_session.commit()
+
+        response = await test_client.get("/api/notes/facts")
+
+        assert response.status_code == 200
+        assert len(response.json()["facts"]) == 2
+
+
 class TestGetTokenCount:
     """Tests for GET /api/notes/token-count endpoint."""
 

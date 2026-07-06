@@ -1,10 +1,13 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from app.db.database import get_session
 from app.db.models import StudentFact
+from app.core.language_profiles import normalize_language_code
 
 router = APIRouter()
 
@@ -17,11 +20,28 @@ class FactUpdate(BaseModel):
     content: str
 
 
+def _facts_query(language_code: Optional[str]):
+    """Facts for one language plus global (NULL-language) facts, matching what
+    the context builder feeds the tutor. No filter returns everything."""
+    stmt = select(StudentFact)
+    if language_code:
+        normalized = normalize_language_code(language_code)
+        stmt = stmt.where(
+            or_(
+                StudentFact.language_code == normalized,
+                StudentFact.language_code.is_(None),
+            )
+        )
+    return stmt.order_by(StudentFact.created_at.asc())
+
+
 @router.get("")
-async def get_notes(session: AsyncSession = Depends(get_session)):
+async def get_notes(
+    language_code: Optional[str] = None,
+    session: AsyncSession = Depends(get_session),
+):
     """Get all student facts formatted as content."""
-    stmt = select(StudentFact).order_by(StudentFact.created_at.asc())
-    result = await session.execute(stmt)
+    result = await session.execute(_facts_query(language_code))
     facts = result.scalars().all()
 
     if not facts:
@@ -33,10 +53,12 @@ async def get_notes(session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/facts")
-async def list_facts(session: AsyncSession = Depends(get_session)):
+async def list_facts(
+    language_code: Optional[str] = None,
+    session: AsyncSession = Depends(get_session),
+):
     """Get all student facts as a list."""
-    stmt = select(StudentFact).order_by(StudentFact.created_at.asc())
-    result = await session.execute(stmt)
+    result = await session.execute(_facts_query(language_code))
     facts = result.scalars().all()
 
     return {
@@ -45,6 +67,7 @@ async def list_facts(session: AsyncSession = Depends(get_session)):
                 "id": f.id,
                 "content": f.content,
                 "source": f.source,
+                "language_code": f.language_code,
                 "created_at": f.created_at.isoformat() if f.created_at else None,
             }
             for f in facts
@@ -61,6 +84,8 @@ async def add_fact(data: FactCreate, session: AsyncSession = Depends(get_session
     if existing:
         raise HTTPException(status_code=400, detail="Fact already exists")
 
+    # Facts added by hand stay global (NULL language): they describe the
+    # learner, and every language profile's tutor should see them.
     fact = StudentFact(content=data.content, source="manual")
     session.add(fact)
     await session.commit()
@@ -70,6 +95,7 @@ async def add_fact(data: FactCreate, session: AsyncSession = Depends(get_session
         "id": fact.id,
         "content": fact.content,
         "source": fact.source,
+        "language_code": fact.language_code,
     }
 
 

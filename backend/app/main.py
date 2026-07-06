@@ -72,11 +72,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Anki sync failed: {e}")
 
-    # Seed grammar data on startup if table is empty
+    # Seed grammar data on startup for any language profile without entries
     try:
-        from app.services.grammar_seeder import check_and_seed_grammar
+        from app.services.grammar_seeder import check_and_seed_all_grammar
         async for session in get_session():
-            result = await check_and_seed_grammar(session)
+            result = await check_and_seed_all_grammar(session)
             if result.get("count", 0) > 0:
                 logger.info(f"Grammar seeded: {result['count']} entries")
             break
@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Nihongo Dojo API",
-    description="Japanese language learning tutor with pluggable LLM providers",
+    description="Language learning tutor with pluggable LLM providers and per-language profiles",
     version="0.2.0",
     lifespan=lifespan
 )

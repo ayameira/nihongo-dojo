@@ -5,6 +5,8 @@ export interface LanguageProfile {
   display_name: string;
   native_name: string;
   speech_language: string;
+  supports_server_tts?: boolean;
+  has_secondary_script?: boolean;
   grammar_level_scheme: {
     name: string;
     levels: string[];

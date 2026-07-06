@@ -262,7 +262,9 @@ export const Chat: React.FC<ChatProps> = ({
       <header className="chat-header">
         <div className="header-left">
           <h1 className="app-title">
-            <span className="title-jp">日本語</span>
+            <span className="title-jp">
+              {languageProfiles.find(profile => profile.code === languageCode)?.native_name || '日本語'}
+            </span>
             <span className="title-en">Dojo</span>
           </h1>
           <div className="header-meta">
@@ -280,7 +282,7 @@ export const Chat: React.FC<ChatProps> = ({
 
         <div className="header-right">
           {languageProfiles.length > 1 && onActiveTargetLanguageChange && (
-            <label className="model-selector" title="Target language workspace">
+            <label className="model-selector" title="Target language workspace" data-tutorial-target="language-select">
               <span className="model-selector-label">Language</span>
               <select
                 aria-label="Target language"

@@ -1,6 +1,6 @@
 # Nihongo Dojo
 
-Nihongo Dojo is a local Japanese practice app with an AI tutor, long-term learner memory, Anki vocabulary sync, JLPT grammar tracking, text-to-speech, and cost tracking.
+Nihongo Dojo is a local language practice app with an AI tutor, long-term learner memory, Anki vocabulary sync, grammar tracking, text-to-speech, and cost tracking. Japanese is the flagship profile, and Spanish, French, Korean, and Mandarin Chinese are also supported through per-language profiles.
 
 It is built for people who want something more personal than a generic chatbot: the tutor can see what vocabulary and grammar you are studying, remember facts about your goals and preferences, and adapt future practice around that context.
 
@@ -19,13 +19,14 @@ It is still a developer-run local app, not a polished commercial product. If you
 
 ## What It Does
 
-- Streaming AI chat for Japanese practice.
+- Streaming AI chat for language practice.
+- Language profiles for Japanese, Spanish, French, Korean, and Mandarin Chinese, each with its own vocabulary, grammar, and sessions.
 - Groq, Gemini, OpenRouter, and other OpenAI-compatible provider support.
 - In-app model selector when multiple providers are configured.
 - Student profile memory for goals, interests, preferences, and recurring mistakes.
 - Anki deck setup wizard with deck selection and field mapping.
 - Vocabulary sidebar with New, Learning, and Mature words.
-- JLPT grammar library from N5 to N1, plus custom grammar points.
+- Grammar library organized by level (JLPT N5-N1 ships pre-seeded for Japanese; CEFR/TOPIK/HSK levels for the other profiles), plus custom grammar points.
 - Image upload for asking about screenshots, textbook pages, handwriting, or signs.
 - Per-message audio playback with optional VOICEVOX voices.
 - Multi-session chat history with automatic conversation summaries.

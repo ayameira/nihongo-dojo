@@ -14,6 +14,7 @@ interface RightSidebarProps {
   onSpeakerChange: (id: number) => void;
   ttsError: string | null;
   onTutorialClick?: () => void;
+  languageCode?: string;
 }
 
 const encouragements = [
@@ -159,6 +160,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   onSpeakerChange,
   ttsError,
   onTutorialClick,
+  languageCode = 'ja',
 }) => {
   const [currentQuote, setCurrentQuote] = useState(() =>
     Math.floor(Math.random() * literaryQuotes.length)
@@ -281,16 +283,18 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         )}
       </div>
 
-      {/* Quote Section */}
-      <div className="quote-section">
-        <div className="quote-jp">{quote.jp}</div>
-        <div className="quote-en">{quote.en}</div>
-        <div className="quote-attribution">
-          <span className="quote-author">{quote.authorJp}</span>
-          <span className="quote-author-en">{quote.author}</span>
-          {quote.workJp && <span className="quote-work">『{quote.workJp}』</span>}
+      {/* Quote Section (the collection is Japanese literature, so ja only) */}
+      {languageCode === 'ja' && (
+        <div className="quote-section">
+          <div className="quote-jp">{quote.jp}</div>
+          <div className="quote-en">{quote.en}</div>
+          <div className="quote-attribution">
+            <span className="quote-author">{quote.authorJp}</span>
+            <span className="quote-author-en">{quote.author}</span>
+            {quote.workJp && <span className="quote-work">『{quote.workJp}』</span>}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Tanuki Section */}
       <div className="tanuki-section">

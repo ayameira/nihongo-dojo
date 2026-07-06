@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.core.language_profiles import get_language_profile
 from app.services.tts_service import (
     generate_audio,
     get_speakers,
@@ -18,14 +19,31 @@ from app.services.tts_service import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Speaker id 0 is reserved for the browser's Web Speech API; the frontend
+# synthesizes locally instead of calling /tts when it is selected.
+BROWSER_SPEAKER = {
+    "id": 0,
+    "name": "Browser TTS",
+    "style": "Default",
+    "display_name": "Browser voice",
+}
+
 
 @router.get("/speakers")
-async def list_speakers():
+async def list_speakers(language_code: Optional[str] = None):
     """
-    List available VOICEVOX speakers/voices.
+    List available speakers/voices for the given target language.
 
-    Returns a list of speakers with their style variations.
+    VOICEVOX only speaks Japanese; other language profiles get the
+    browser-synthesis speaker only.
     """
+    profile = get_language_profile(language_code)
+    if not profile.supports_server_tts:
+        return {
+            "speakers": [BROWSER_SPEAKER],
+            "default_speaker_id": BROWSER_SPEAKER["id"],
+        }
+
     try:
         speakers = await get_speakers()
         settings = get_settings()
@@ -66,13 +84,20 @@ def ensure_cache_dir() -> None:
 @router.post("/tts")
 async def text_to_speech(request: TTSRequest):
     """
-    Generate audio from Japanese text using VOICEVOX.
+    Generate audio using VOICEVOX for languages with server TTS support.
 
     Uses file-based caching for instant playback of repeated words.
     The cache key is MD5(text_speakerId).
 
     Returns WAV audio data.
     """
+    profile = get_language_profile(request.language_code)
+    if not profile.supports_server_tts:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Server TTS is not available for {profile.display_name}; use the browser voice.",
+        )
+
     settings = get_settings()
     speaker_id = request.speaker_id or settings.default_speaker_id
 

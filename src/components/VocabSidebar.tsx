@@ -152,7 +152,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
   }, [languageParam]);
 
   const formatVocabDisplay = (vocab: VocabEntry) => {
-    if (vocab.kanji) {
+    if (vocab.kanji && vocab.kanji !== vocab.kana) {
       return (
         <span>
           <span className="font-medium">{vocab.kanji}</span>
@@ -160,7 +160,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
         </span>
       );
     }
-    return <span className="font-medium">{vocab.kana}</span>;
+    return <span className="font-medium">{vocab.kanji || vocab.kana}</span>;
   };
 
   if (isCollapsed) {
@@ -403,7 +403,7 @@ export const VocabSidebar: React.FC<VocabSidebarProps> = ({
                 <h3 className="text-xl font-bold text-ink">
                   {selectedVocab.kanji || selectedVocab.kana}
                 </h3>
-                {selectedVocab.kanji && (
+                {selectedVocab.kanji && selectedVocab.kanji !== selectedVocab.kana && (
                   <p className="text-ink-muted">{selectedVocab.kana}</p>
                 )}
               </div>

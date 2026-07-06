@@ -35,7 +35,9 @@ export function useTTS(languageCode = 'ja'): UseTTSReturn {
   useEffect(() => {
     const fetchSpeakers = async () => {
       try {
-        const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/media/speakers');
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL || ''}/api/media/speakers?language_code=${encodeURIComponent(languageCode)}`
+        );
 
         if (!response.ok) {
           throw new Error('Failed to load voices');
