@@ -76,11 +76,10 @@ function App() {
     refreshSessions,
   } = useSessions(activeLanguageCode);
 
-  const currentSession = sessions.find((session) => session.id === currentSessionId) || null;
-  const sessionLanguageCode = currentSession?.language_code || activeLanguageCode;
-  const sessionProfile = profiles.find((profile) => profile.code === sessionLanguageCode)
-    || activeProfile
-    || null;
+  // Each language is its own room: the session list, chat, vocab, grammar,
+  // facts, and voices all follow the active language together.
+  const sessionLanguageCode = activeLanguageCode;
+  const sessionProfile = activeProfile;
 
   // TTS voice selection
   const {

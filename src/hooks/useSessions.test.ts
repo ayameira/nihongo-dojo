@@ -103,7 +103,7 @@ describe('useSessions', () => {
 
       expect(newId).toMatch(/^session_\d+_/);
       expect(result.current.currentSessionId).toBe(newId);
-      expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_session_id', newId);
+      expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_session_id:ja', newId);
     });
 
     it('sends the active target language when creating a session', async () => {
@@ -163,7 +163,56 @@ describe('useSessions', () => {
       });
 
       expect(result.current.currentSessionId).toBe('session_2');
-      expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_session_id', 'session_2');
+      expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_session_id:ja', 'session_2');
+    });
+  });
+
+  describe('language rooms', () => {
+    it('scopes the session list to the active language', async () => {
+      const fetchSpy = createMockFetch({
+        '/api/sessions': mockSessions,
+      });
+      global.fetch = fetchSpy;
+
+      renderHook(() => useSessions('es'));
+
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          expect.stringContaining('/api/sessions?language_code=es')
+        );
+      });
+    });
+
+    it('reloads sessions and restores the room session when the language changes', async () => {
+      const spanishSessions = [
+        { ...mockSessions[0], id: 'es_session_1', language_code: 'es' },
+      ];
+      const stored: Record<string, string> = {
+        'nihongo_session_id:ja': 'session_1',
+        'nihongo_session_id:es': 'es_session_1',
+      };
+      localStorage.getItem = vi.fn((key: string) => stored[key] ?? null);
+      global.fetch = vi.fn().mockImplementation((url: string) => ({
+        ok: true,
+        json: () =>
+          Promise.resolve(url.includes('language_code=es') ? spanishSessions : mockSessions),
+      }));
+
+      const { result, rerender } = renderHook(
+        ({ language }) => useSessions(language),
+        { initialProps: { language: 'ja' } }
+      );
+
+      await waitFor(() => {
+        expect(result.current.currentSessionId).toBe('session_1');
+      });
+
+      rerender({ language: 'es' });
+
+      await waitFor(() => {
+        expect(result.current.currentSessionId).toBe('es_session_1');
+      });
+      expect(result.current.sessions).toEqual(spanishSessions);
     });
   });
 

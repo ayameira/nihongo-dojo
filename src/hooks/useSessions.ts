@@ -25,6 +25,16 @@ function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// Each language works as its own room and remembers its own open session.
+const sessionStorageKey = (languageCode: string) => `nihongo_session_id:${languageCode}`;
+
+function readStoredSessionId(languageCode: string): string | null {
+  const scoped = localStorage.getItem(sessionStorageKey(languageCode));
+  if (scoped) return scoped;
+  // The un-scoped key predates language rooms; treat it as the Japanese room's.
+  return languageCode === 'ja' ? localStorage.getItem('nihongo_session_id') : null;
+}
+
 export function useSessions(activeLanguageCode = 'ja'): UseSessionsReturn {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -32,7 +42,9 @@ export function useSessions(activeLanguageCode = 'ja'): UseSessionsReturn {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/sessions');
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || ''}/api/sessions?language_code=${encodeURIComponent(activeLanguageCode)}`
+      );
       if (response.ok) {
         const data = await response.json();
         setSessions(data);
@@ -42,16 +54,16 @@ export function useSessions(activeLanguageCode = 'ja'): UseSessionsReturn {
       console.error('Failed to fetch sessions:', error);
     }
     return [];
-  }, []);
+  }, [activeLanguageCode]);
 
-  // Initialize: load sessions and set current
+  // Initialize (and re-initialize on room change): load the room's sessions
+  // and restore the session that was last open there.
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
       const loadedSessions = await fetchSessions();
 
-      // Get stored session ID
-      let storedId = localStorage.getItem('nihongo_session_id');
+      const storedId = readStoredSessionId(activeLanguageCode);
 
       if (storedId && loadedSessions.some((s: Session) => s.id === storedId)) {
         // Use stored session if it exists
@@ -60,19 +72,19 @@ export function useSessions(activeLanguageCode = 'ja'): UseSessionsReturn {
         // Use most recent session
         const mostRecent = loadedSessions[0].id;
         setCurrentSessionId(mostRecent);
-        localStorage.setItem('nihongo_session_id', mostRecent);
+        localStorage.setItem(sessionStorageKey(activeLanguageCode), mostRecent);
       } else {
         // No sessions exist, create a new one
         const newId = generateSessionId();
         setCurrentSessionId(newId);
-        localStorage.setItem('nihongo_session_id', newId);
+        localStorage.setItem(sessionStorageKey(activeLanguageCode), newId);
       }
 
       setIsLoading(false);
     };
 
     init();
-  }, [fetchSessions]);
+  }, [fetchSessions, activeLanguageCode]);
 
   const createSession = useCallback(async (): Promise<string> => {
     const newId = generateSessionId();
@@ -94,15 +106,15 @@ export function useSessions(activeLanguageCode = 'ja'): UseSessionsReturn {
 
     // Switch to new session
     setCurrentSessionId(newId);
-    localStorage.setItem('nihongo_session_id', newId);
+    localStorage.setItem(sessionStorageKey(activeLanguageCode), newId);
 
     return newId;
   }, [activeLanguageCode]);
 
   const switchSession = useCallback((sessionId: string) => {
     setCurrentSessionId(sessionId);
-    localStorage.setItem('nihongo_session_id', sessionId);
-  }, []);
+    localStorage.setItem(sessionStorageKey(activeLanguageCode), sessionId);
+  }, [activeLanguageCode]);
 
   const renameSession = useCallback(async (sessionId: string, name: string) => {
     try {
@@ -138,12 +150,12 @@ export function useSessions(activeLanguageCode = 'ja'): UseSessionsReturn {
             if (remaining.length > 0) {
               const nextId = remaining[0].id;
               setCurrentSessionId(nextId);
-              localStorage.setItem('nihongo_session_id', nextId);
+              localStorage.setItem(sessionStorageKey(activeLanguageCode), nextId);
             } else {
               // No sessions left, create a new one
               const newId = generateSessionId();
               setCurrentSessionId(newId);
-              localStorage.setItem('nihongo_session_id', newId);
+              localStorage.setItem(sessionStorageKey(activeLanguageCode), newId);
             }
           }
 
@@ -153,7 +165,7 @@ export function useSessions(activeLanguageCode = 'ja'): UseSessionsReturn {
     } catch (error) {
       console.error('Failed to delete session:', error);
     }
-  }, [currentSessionId]);
+  }, [currentSessionId, activeLanguageCode]);
 
   const refreshSessions = useCallback(async () => {
     await fetchSessions();

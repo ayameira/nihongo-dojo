@@ -35,9 +35,15 @@ class SessionResponse(BaseModel):
 
 
 @router.get("")
-async def list_sessions(session=Depends(get_session)) -> list[SessionResponse]:
-    """List all sessions ordered by most recently updated."""
+async def list_sessions(
+    language_code: Optional[str] = None,
+    session=Depends(get_session),
+) -> list[SessionResponse]:
+    """List sessions ordered by most recently updated, optionally scoped to
+    one language so each language works as its own room."""
     stmt = select(ChatSession).order_by(ChatSession.updated_at.desc())
+    if language_code:
+        stmt = stmt.where(ChatSession.language_code == normalize_language_code(language_code))
     result = await session.execute(stmt)
     sessions = result.scalars().all()
     return [SessionResponse.model_validate(s) for s in sessions]

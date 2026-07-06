@@ -33,6 +33,18 @@ class TestListSessions:
         assert sample_session.id in ids
         assert new_session_id in ids
 
+    @pytest.mark.asyncio
+    async def test_filters_sessions_by_language(self, test_client):
+        """Each language room only lists its own sessions."""
+        await test_client.post("/api/sessions", json={"id": "ja_room", "language_code": "ja"})
+        await test_client.post("/api/sessions", json={"id": "es_room", "language_code": "es"})
+
+        response = await test_client.get("/api/sessions", params={"language_code": "es"})
+
+        assert response.status_code == 200
+        ids = [s["id"] for s in response.json()]
+        assert ids == ["es_room"]
+
 
 class TestCreateSession:
     """Tests for POST /api/sessions endpoint."""
