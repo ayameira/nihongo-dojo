@@ -11,7 +11,6 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from pydantic import BaseModel
 from sqlalchemy import select, func, update
-from sqlalchemy import or_
 
 from app.db.database import async_session_maker
 from app.db.models import ChatMessage, ChatSession, StudentFact
@@ -185,7 +184,10 @@ class MemoryService:
             await session.commit()
 
     async def _add_student_facts(self, new_facts: str, language_code: str | None = None) -> None:
-        """Add extracted facts to the student_facts table."""
+        """Add extracted facts to the session's language room."""
+        from app.core.language_profiles import normalize_language_code
+
+        language_code = normalize_language_code(language_code)
         try:
             # Parse facts (expect newline or bullet-separated list)
             fact_lines = [
@@ -199,10 +201,10 @@ class MemoryService:
                 for fact_text in fact_lines:
                     if not fact_text:
                         continue
-                    # Check for duplicate before adding
+                    # Check for duplicate before adding (within the room)
                     stmt = select(StudentFact).where(
                         StudentFact.content == fact_text,
-                        or_(StudentFact.language_code == language_code, StudentFact.language_code.is_(None)),
+                        StudentFact.language_code == language_code,
                     )
                     existing = (await session.execute(stmt)).scalar_one_or_none()
                     if not existing:

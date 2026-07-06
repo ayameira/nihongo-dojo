@@ -163,10 +163,10 @@ def format_vocab_list(vocab_list: List[Dict], language_code: Optional[str] = Non
 
 
 async def fetch_student_facts(language_code: Optional[str] = None) -> List[Dict]:
-    """Fetch all student facts from the database."""
+    """Fetch the student facts belonging to one language room."""
     from app.db.database import async_session_maker
     from app.db.models import StudentFact
-    from sqlalchemy import select, or_
+    from sqlalchemy import select
 
     language_code = normalize_language_code(language_code or get_settings().target_language_code)
 
@@ -174,7 +174,7 @@ async def fetch_student_facts(language_code: Optional[str] = None) -> List[Dict]
         async with async_session_maker() as session:
             stmt = (
                 select(StudentFact)
-                .where(or_(StudentFact.language_code == language_code, StudentFact.language_code.is_(None)))
+                .where(StudentFact.language_code == language_code)
                 .order_by(StudentFact.created_at.asc())
             )
             result = await session.execute(stmt)

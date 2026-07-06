@@ -37,7 +37,7 @@ MANAGE_STUDENT_FACTS_TOOL = {
             },
             "language_code": {
                 "type": "string",
-                "description": "Optional target language code for language-specific facts. Leave absent for global learner facts."
+                "description": "Language room the fact belongs to. Defaults to the active session language."
             }
         },
         "required": ["action"]
@@ -109,17 +109,17 @@ async def execute_tool_call(tool_name: str, args: Dict[str, Any]) -> str:
 
 
 async def execute_manage_student_facts(args: Dict[str, Any]) -> str:
-    """Manage student facts in the database."""
+    """Manage student facts in the database. Facts always belong to one
+    language room; the listener injects the session language when the model
+    leaves it out."""
     from app.db.database import async_session_maker
     from app.db.models import StudentFact
-    from sqlalchemy import select, or_
+    from sqlalchemy import select
 
     action = args.get("action")
     content = args.get("content", "").strip()
     fact_id = args.get("fact_id")
-    language_code = args.get("language_code")
-    if language_code is not None:
-        language_code = normalize_language_code(language_code)
+    language_code = normalize_language_code(args.get("language_code"))
 
     if not action:
         return "Error: 'action' is required"
@@ -129,10 +129,10 @@ async def execute_manage_student_facts(args: Dict[str, Any]) -> str:
             if not content:
                 return "Error: 'content' is required for add action"
 
-            # Check for duplicate (exact match)
+            # Check for duplicate (exact match) within the room
             stmt = select(StudentFact).where(
                 StudentFact.content == content,
-                or_(StudentFact.language_code == language_code, StudentFact.language_code.is_(None)),
+                StudentFact.language_code == language_code,
             )
             existing = (await session.execute(stmt)).scalar_one_or_none()
             if existing:

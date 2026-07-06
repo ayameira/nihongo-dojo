@@ -3,8 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select
 
+from app.config import get_settings
 from app.db.database import get_session
 from app.db.models import StudentFact
 from app.core.language_profiles import normalize_language_code
@@ -14,6 +15,7 @@ router = APIRouter()
 
 class FactCreate(BaseModel):
     content: str
+    language_code: Optional[str] = None
 
 
 class FactUpdate(BaseModel):
@@ -21,17 +23,11 @@ class FactUpdate(BaseModel):
 
 
 def _facts_query(language_code: Optional[str]):
-    """Facts for one language plus global (NULL-language) facts, matching what
-    the context builder feeds the tutor. No filter returns everything."""
+    """Facts belonging to one language room, matching what the context builder
+    feeds that room's tutor. No filter returns everything."""
     stmt = select(StudentFact)
     if language_code:
-        normalized = normalize_language_code(language_code)
-        stmt = stmt.where(
-            or_(
-                StudentFact.language_code == normalized,
-                StudentFact.language_code.is_(None),
-            )
-        )
+        stmt = stmt.where(StudentFact.language_code == normalize_language_code(language_code))
     return stmt.order_by(StudentFact.created_at.asc())
 
 
@@ -77,16 +73,19 @@ async def list_facts(
 
 @router.post("/facts")
 async def add_fact(data: FactCreate, session: AsyncSession = Depends(get_session)):
-    """Add a new student fact."""
-    # Check for duplicate
-    stmt = select(StudentFact).where(StudentFact.content == data.content)
+    """Add a new student fact to a language room."""
+    language_code = normalize_language_code(data.language_code or get_settings().target_language_code)
+
+    # Check for duplicate within the room
+    stmt = select(StudentFact).where(
+        StudentFact.content == data.content,
+        StudentFact.language_code == language_code,
+    )
     existing = (await session.execute(stmt)).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="Fact already exists")
 
-    # Facts added by hand stay global (NULL language): they describe the
-    # learner, and every language profile's tutor should see them.
-    fact = StudentFact(content=data.content, source="manual")
+    fact = StudentFact(content=data.content, source="manual", language_code=language_code)
     session.add(fact)
     await session.commit()
     await session.refresh(fact)

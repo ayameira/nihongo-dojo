@@ -56,6 +56,13 @@ async def _run_migrations(conn):
         "UPDATE grammar_entries SET language_code = 'ja' WHERE language_code IS NULL",
     )
 
+    # Facts predating language rooms were stored without a language; they all
+    # came from Japanese tutoring, so adopt them into the Japanese room. Runs
+    # every startup and is a no-op once nothing is NULL.
+    await conn.execute(
+        text("UPDATE student_facts SET language_code = 'ja' WHERE language_code IS NULL")
+    )
+
 
 async def init_db():
     global engine, async_session_maker

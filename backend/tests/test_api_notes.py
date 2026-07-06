@@ -123,15 +123,14 @@ class TestUpdateFact:
         assert response.status_code == 404
 
 
-class TestFactsLanguageFilter:
-    """Tests for language_code filtering on GET /api/notes/facts."""
+class TestFactsLanguageRooms:
+    """Each language room has its own student profile."""
 
     @pytest.mark.asyncio
-    async def test_returns_language_scoped_and_global_facts(self, test_client: AsyncClient, async_session):
+    async def test_returns_only_the_rooms_facts(self, test_client: AsyncClient, async_session):
         from app.db.models import StudentFact
 
         async_session.add_all([
-            StudentFact(content="Global fact", source="manual"),
             StudentFact(content="Japanese fact", source="listener", language_code="ja"),
             StudentFact(content="Spanish fact", source="listener", language_code="es"),
         ])
@@ -141,16 +140,14 @@ class TestFactsLanguageFilter:
 
         assert response.status_code == 200
         contents = [f["content"] for f in response.json()["facts"]]
-        assert "Global fact" in contents
-        assert "Spanish fact" in contents
-        assert "Japanese fact" not in contents
+        assert contents == ["Spanish fact"]
 
     @pytest.mark.asyncio
     async def test_no_filter_returns_all_facts(self, test_client: AsyncClient, async_session):
         from app.db.models import StudentFact
 
         async_session.add_all([
-            StudentFact(content="Global fact", source="manual"),
+            StudentFact(content="Japanese fact", source="listener", language_code="ja"),
             StudentFact(content="Spanish fact", source="listener", language_code="es"),
         ])
         await async_session.commit()
@@ -159,6 +156,35 @@ class TestFactsLanguageFilter:
 
         assert response.status_code == 200
         assert len(response.json()["facts"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_manual_fact_is_stored_in_its_room(self, test_client: AsyncClient):
+        response = await test_client.post(
+            "/api/notes/facts",
+            json={"content": "Prefers formal Spanish", "language_code": "es"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["language_code"] == "es"
+
+        es_facts = await test_client.get("/api/notes/facts", params={"language_code": "es"})
+        ja_facts = await test_client.get("/api/notes/facts", params={"language_code": "ja"})
+        assert [f["content"] for f in es_facts.json()["facts"]] == ["Prefers formal Spanish"]
+        assert ja_facts.json()["facts"] == []
+
+    @pytest.mark.asyncio
+    async def test_same_fact_can_exist_in_two_rooms(self, test_client: AsyncClient):
+        first = await test_client.post(
+            "/api/notes/facts",
+            json={"content": "Name: Aya", "language_code": "ja"},
+        )
+        second = await test_client.post(
+            "/api/notes/facts",
+            json={"content": "Name: Aya", "language_code": "es"},
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 200
 
 
 class TestGetTokenCount:

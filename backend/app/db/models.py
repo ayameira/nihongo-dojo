@@ -99,7 +99,8 @@ class StudentFact(Base):
     __tablename__ = "student_facts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    language_code = Column(String(10), nullable=True, index=True)
+    # Every fact belongs to one language room; legacy NULLs are migrated to "ja".
+    language_code = Column(String(10), default="ja", nullable=False, index=True)
     content = Column(Text, nullable=False)
     source = Column(String(20), default="tutor")  # "tutor" or "compaction"
     created_at = Column(DateTime, default=func.now())

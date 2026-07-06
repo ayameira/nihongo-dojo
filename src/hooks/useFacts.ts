@@ -48,7 +48,7 @@ export function useFacts(languageCode?: string): UseFactsReturn {
       const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/notes/facts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, language_code: languageCode }),
       });
 
       if (response.ok) {
@@ -60,7 +60,7 @@ export function useFacts(languageCode?: string): UseFactsReturn {
       console.error('Failed to add fact:', error);
     }
     return null;
-  }, []);
+  }, [languageCode]);
 
   const updateFact = useCallback(async (id: number, content: string): Promise<boolean> => {
     try {

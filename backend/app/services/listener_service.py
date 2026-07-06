@@ -58,7 +58,8 @@ class ListenerService:
             )
 
             async def execute_session_tool(tool_name, args):
-                if tool_name == "manage_grammar" and "language_code" not in args:
+                # Every tool write belongs to the session's language room.
+                if tool_name in ("manage_grammar", "manage_student_facts") and "language_code" not in args:
                     args = {**args, "language_code": language_code}
                 return await execute_tool_call(tool_name, args)
 
