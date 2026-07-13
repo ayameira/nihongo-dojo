@@ -26,10 +26,11 @@ It is still a developer-run local app, not a polished commercial product. If you
 - Student profile memory for goals, interests, preferences, and recurring mistakes.
 - Anki deck setup wizard with deck selection and field mapping.
 - Vocabulary sidebar with New, Learning, and Mature words.
-- Grammar library organized by level (JLPT N5-N1 ships pre-seeded for Japanese; CEFR levels for the other profiles), plus custom grammar points.
+- Grammar library organized by level. Japanese comes with the full JLPT N5-N1 list, seeded automatically the first time you launch the app; English and French use CEFR levels and start empty, filling in as the tutor introduces points.
 - Image upload for asking about screenshots, textbook pages, handwriting, or signs.
 - Per-message audio playback with optional VOICEVOX (Japanese) and Kokoro (English/French) voices.
 - Multi-session chat history with automatic conversation summaries.
+- Guided first-run tutorial for new users.
 - Token and estimated cost dashboard with a weekly budget indicator.
 - Light, dark, and system theme modes.
 
