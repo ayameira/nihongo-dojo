@@ -19,7 +19,9 @@ This document provides a detailed reference of all AI interactions in Nihongo Do
 
 ## 1. Architecture Overview
 
-Nihongo Dojo uses Google's Gemini API (gemini-3-flash-preview) with a **two-agent architecture**:
+Nihongo Dojo is provider-neutral: `backend/app/core/llm_client.py` dispatches to Groq (the default), Gemini, OpenRouter, or any OpenAI-compatible endpoint. The Gemini path is described in detail below; the OpenAI-compatible path lives in `openai_compatible_client.py` and follows the same flow.
+
+On top of whichever provider is configured, the app uses a **two-agent architecture**:
 
 1. **Tutor Agent** - Synchronous, SSE streaming, focused purely on teaching (NO tools)
 2. **Listener Agent** - Background task, extracts student facts from messages (uses tools)
