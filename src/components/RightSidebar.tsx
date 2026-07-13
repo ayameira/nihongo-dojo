@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { literaryQuotes } from '../data/literaryQuotes';
+import { getQuotesForLanguage } from '../data/literaryQuotes';
 import { Speaker } from '../hooks/useTTS';
 import { useTheme } from '../hooks/useTheme';
 
@@ -10,8 +10,8 @@ interface RightSidebarProps {
   onToggle: () => void;
   onBudgetClick: () => void;
   speakers: Speaker[];
-  selectedSpeakerId: number;
-  onSpeakerChange: (id: number) => void;
+  selectedSpeakerId: string;
+  onSpeakerChange: (id: string) => void;
   ttsError: string | null;
   onTutorialClick?: () => void;
   languageCode?: string;
@@ -162,17 +162,19 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   onTutorialClick,
   languageCode = 'ja',
 }) => {
+  const quotes = getQuotesForLanguage(languageCode);
   const [currentQuote, setCurrentQuote] = useState(() =>
-    Math.floor(Math.random() * literaryQuotes.length)
+    Math.floor(Math.random() * Math.max(quotes.length, 1))
   );
 
-  // Rotate quotes every 45 seconds
+  // Pick a fresh quote when the language changes, then rotate every 45 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentQuote(Math.floor(Math.random() * literaryQuotes.length));
-    }, 45000);
+    const pickQuote = () =>
+      setCurrentQuote(Math.floor(Math.random() * Math.max(getQuotesForLanguage(languageCode).length, 1)));
+    pickQuote();
+    const interval = setInterval(pickQuote, 45000);
     return () => clearInterval(interval);
-  }, []);
+  }, [languageCode]);
 
   const spentPercentage = (totalSpent / weeklyLimit) * 100;
   const remaining = weeklyLimit - totalSpent;
@@ -211,7 +213,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     );
   }
 
-  const quote = literaryQuotes[currentQuote];
+  // Clamp with modulo: a stale index from a longer collection stays in range
+  // for the render before the language-change effect re-rolls it.
+  const quote = quotes.length > 0 ? quotes[currentQuote % quotes.length] : undefined;
 
   return (
     <div className="right-sidebar expanded" style={{ width: '100%' }}>
@@ -269,7 +273,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         ) : speakers.length > 0 ? (
           <select
             value={selectedSpeakerId}
-            onChange={(e) => onSpeakerChange(parseInt(e.target.value, 10))}
+            onChange={(e) => onSpeakerChange(e.target.value)}
             className="voice-select"
           >
             {speakers.map((speaker) => (
@@ -283,15 +287,19 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         )}
       </div>
 
-      {/* Quote Section (the collection is Japanese literature, so ja only) */}
-      {languageCode === 'ja' && (
+      {/* Quote Section (shown for languages with a literary quote collection) */}
+      {quote && (
         <div className="quote-section">
-          <div className="quote-jp">{quote.jp}</div>
-          <div className="quote-en">{quote.en}</div>
+          <div className="quote-text">{quote.text}</div>
+          {quote.translation && <div className="quote-translation">{quote.translation}</div>}
           <div className="quote-attribution">
-            <span className="quote-author">{quote.authorJp}</span>
-            <span className="quote-author-en">{quote.author}</span>
-            {quote.workJp && <span className="quote-work">『{quote.workJp}』</span>}
+            <span className="quote-author">{quote.authorNative ?? quote.author}</span>
+            {quote.authorNative && <span className="quote-author-en">{quote.author}</span>}
+            {quote.workNative ? (
+              <span className="quote-work">『{quote.workNative}』</span>
+            ) : quote.work ? (
+              <span className="quote-work">{quote.work}</span>
+            ) : null}
           </div>
         </div>
       )}

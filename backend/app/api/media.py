@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.core.language_profiles import get_language_profile
+from app.services import kokoro_tts
 from app.services.tts_service import (
     generate_audio,
     get_speakers,
@@ -19,10 +20,11 @@ from app.services.tts_service import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Speaker id 0 is reserved for the browser's Web Speech API; the frontend
-# synthesizes locally instead of calling /tts when it is selected.
+# Speaker ids are strings: VOICEVOX style ids ("2"), Kokoro voice names
+# ("af_heart"), or this reserved id for the browser's Web Speech API —
+# the frontend synthesizes locally instead of calling /tts when selected.
 BROWSER_SPEAKER = {
-    "id": 0,
+    "id": "browser",
     "name": "Browser TTS",
     "style": "Default",
     "display_name": "Browser voice",
@@ -34,41 +36,54 @@ async def list_speakers(language_code: Optional[str] = None):
     """
     List available speakers/voices for the given target language.
 
-    VOICEVOX only speaks Japanese; other language profiles get the
-    browser-synthesis speaker only.
+    Japanese uses VOICEVOX, English and French use Kokoro; languages
+    without a server engine get the browser-synthesis speaker only.
     """
     profile = get_language_profile(language_code)
-    if not profile.supports_server_tts:
-        return {
-            "speakers": [BROWSER_SPEAKER],
-            "default_speaker_id": BROWSER_SPEAKER["id"],
-        }
 
     try:
-        speakers = await get_speakers()
-        settings = get_settings()
-        return {
-            "speakers": speakers,
-            "default_speaker_id": settings.default_speaker_id
-        }
+        if profile.tts_engine == "voicevox":
+            settings = get_settings()
+            speakers = [
+                {**speaker, "id": str(speaker["id"])}
+                for speaker in await get_speakers()
+            ]
+            return {
+                "speakers": speakers,
+                "default_speaker_id": str(settings.default_speaker_id),
+            }
+
+        if profile.tts_engine == "kokoro":
+            speakers = await kokoro_tts.get_voices(profile.code)
+            if speakers:
+                return {
+                    "speakers": speakers,
+                    "default_speaker_id": kokoro_tts.default_voice(profile.code, speakers),
+                }
+
     except TTSServiceUnavailable as e:
-        logger.warning(f"VOICEVOX not available: {e}")
+        logger.warning(f"TTS server not available: {e}")
         raise HTTPException(
             status_code=503,
             detail=str(e)
         )
 
+    return {
+        "speakers": [BROWSER_SPEAKER],
+        "default_speaker_id": BROWSER_SPEAKER["id"],
+    }
+
 
 class TTSRequest(BaseModel):
     text: str
-    speaker_id: Optional[int] = None
+    speaker_id: Optional[str] = None
     language_code: Optional[str] = None
 
 
-def get_cache_path(text: str, speaker_id: int) -> Path:
-    """Generate cache file path based on text and speaker ID hash."""
+def get_cache_path(text: str, speaker_key: str) -> Path:
+    """Generate cache file path based on text and speaker key hash."""
     settings = get_settings()
-    cache_key = f"{text}_{speaker_id}"
+    cache_key = f"{text}_{speaker_key}"
     hash_value = hashlib.md5(cache_key.encode("utf-8")).hexdigest()
     cache_dir = Path(settings.tts_cache_dir)
     return cache_dir / f"{hash_value}.wav"
@@ -84,28 +99,38 @@ def ensure_cache_dir() -> None:
 @router.post("/tts")
 async def text_to_speech(request: TTSRequest):
     """
-    Generate audio using VOICEVOX for languages with server TTS support.
+    Generate audio via the language's TTS engine (VOICEVOX or Kokoro).
 
     Uses file-based caching for instant playback of repeated words.
-    The cache key is MD5(text_speakerId).
+    The cache key is MD5(text + engine-qualified speaker).
 
     Returns WAV audio data.
     """
     profile = get_language_profile(request.language_code)
-    if not profile.supports_server_tts:
+    engine = profile.tts_engine
+    if engine is None or request.speaker_id == BROWSER_SPEAKER["id"]:
         raise HTTPException(
             status_code=400,
             detail=f"Server TTS is not available for {profile.display_name}; use the browser voice.",
         )
 
-    settings = get_settings()
-    speaker_id = request.speaker_id or settings.default_speaker_id
+    if engine == "voicevox":
+        settings = get_settings()
+        try:
+            speaker = int(request.speaker_id) if request.speaker_id else settings.default_speaker_id
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid VOICEVOX speaker id: {request.speaker_id}",
+            )
+    else:
+        speaker = request.speaker_id or kokoro_tts.default_voice(profile.code)
 
     # Ensure cache directory exists
     ensure_cache_dir()
 
     # Check cache
-    cache_path = get_cache_path(request.text, speaker_id)
+    cache_path = get_cache_path(request.text, f"{engine}_{speaker}")
 
     if cache_path.exists():
         logger.info(f"Cache HIT for: {request.text[:30]}...")
@@ -119,7 +144,10 @@ async def text_to_speech(request: TTSRequest):
     logger.info(f"Cache MISS for: {request.text[:30]}...")
 
     try:
-        audio_data = await generate_audio(request.text, speaker_id)
+        if engine == "voicevox":
+            audio_data = await generate_audio(request.text, speaker)
+        else:
+            audio_data = await kokoro_tts.generate_audio(request.text, speaker)
 
         # Save to cache
         cache_path.write_bytes(audio_data)

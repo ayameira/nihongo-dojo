@@ -320,6 +320,87 @@ body {
   opacity: 0.55;
 }
 
+button.model-select {
+  padding: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.model-selector.open {
+  border-color: var(--ink-muted);
+  background: var(--paper);
+}
+
+.select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -1px;
+  right: -1px;
+  z-index: 60;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--paper);
+  border: 1px solid var(--paper-dark);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  animation: select-menu-in 0.12s ease;
+}
+
+.dark .select-menu {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes select-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.select-menu-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 6px var(--space-sm);
+  border-radius: 5px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.select-menu-option.highlighted {
+  background: var(--paper-warm);
+}
+
+.select-menu-option[aria-selected="true"] {
+  color: var(--vermillion);
+}
+
+.select-menu-option.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.select-menu-check {
+  width: 1em;
+  flex-shrink: 0;
+  color: var(--vermillion);
+}
+
+.select-menu-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pending-feedback {
   display: flex;
   align-items: center;
@@ -1875,7 +1956,7 @@ body {
   text-align: center;
 }
 
-.quote-jp {
+.quote-text {
   font-family: var(--font-jp);
   font-size: 0.9rem;
   color: var(--ink);
@@ -1884,14 +1965,7 @@ body {
   line-height: 1.6;
 }
 
-.quote-romaji {
-  font-size: 0.65rem;
-  color: var(--ink-muted);
-  font-style: italic;
-  margin-bottom: var(--space-xs);
-}
-
-.quote-en {
+.quote-translation {
   font-size: 0.75rem;
   color: var(--ink-light);
   font-style: italic;

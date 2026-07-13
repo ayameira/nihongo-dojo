@@ -62,7 +62,8 @@ cd backend
 - `anki_introspect.py` - Read-only inspection of Anki collections (decks, note types, fields, suggested mappings) for the setup wizard
 - `anki_importer.py` - Config-driven import: `import_deck_config`/`sync_all_decks` import vocab per `AnkiDeckConfig` using its field mapping
 - `anki_sync.py` - Legacy hardcoded WaniKani export (still backing the old `/api/config/sync-anki` endpoint)
-- `tts_service.py` - VOICEVOX text-to-speech integration
+- `tts_service.py` - VOICEVOX text-to-speech integration (Japanese)
+- `kokoro_tts.py` - Kokoro-FastAPI text-to-speech integration (English/French)
 - `notes_service.py` - Student record file operations
 
 **Database Models** (`backend/app/db/models.py`):
@@ -85,7 +86,8 @@ cd backend
 Settings in `.env` (see `backend/app/config.py`):
 - `GEMINI_API_KEY` - Required for chat
 - `GEMINI_MODEL` - Model selection (default: gemini-3-flash-preview)
-- `VOICEVOX_URL` - TTS server URL
+- `VOICEVOX_URL` - Japanese TTS server URL
+- `KOKORO_URL` - English/French TTS server URL (Kokoro-FastAPI)
 - Model pricing auto-configured from registry in `config.py`
 
 ## Key Patterns

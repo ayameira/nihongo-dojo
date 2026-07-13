@@ -134,11 +134,15 @@ describe('Chat', () => {
         }),
       });
 
+      const user = userEvent.setup();
+
       render(<Chat sessionId="test_session" />);
 
-      const selector = await screen.findByLabelText('Chat model');
-      expect(selector).toHaveValue('gemini:gemini-3-flash-preview');
-      expect(screen.getByText('Gemini 3 Pro Preview')).toBeInTheDocument();
+      const selector = await screen.findByRole('button', { name: 'Chat model' });
+      expect(selector).toHaveTextContent('Gemini 3 Flash Preview');
+
+      await user.click(selector);
+      expect(screen.getByRole('option', { name: /Gemini 3 Pro Preview/ })).toBeInTheDocument();
 
       await waitFor(() => {
         expect(mockUseChat).toHaveBeenLastCalledWith('test_session', 'gemini-3-flash-preview', 'gemini', 'ja');
@@ -170,10 +174,11 @@ describe('Chat', () => {
 
       render(<Chat sessionId="test_session" />);
 
-      const selector = await screen.findByLabelText('Chat model');
-      await user.selectOptions(selector, 'gemini:gemini-3-pro-preview');
+      const selector = await screen.findByRole('button', { name: 'Chat model' });
+      await user.click(selector);
+      await user.click(screen.getByRole('option', { name: /Gemini 3 Pro Preview/ }));
 
-      expect(selector).toHaveValue('gemini:gemini-3-pro-preview');
+      expect(selector).toHaveTextContent('Gemini 3 Pro Preview');
       expect(localStorage.setItem).toHaveBeenCalledWith('nihongo_chat_model', 'gemini:gemini-3-pro-preview');
 
       await waitFor(() => {

@@ -17,9 +17,10 @@ vi.mock('./hooks/useSessions', () => ({
 }));
 
 vi.mock('./hooks/useTTS', () => ({
+  BROWSER_SPEAKER_ID: 'browser',
   useTTS: () => ({
     speakers: [],
-    selectedSpeakerId: 0,
+    selectedSpeakerId: 'browser',
     error: null,
     setSelectedSpeakerId: vi.fn(),
   }),

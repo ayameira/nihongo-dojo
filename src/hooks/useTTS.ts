@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 
+// Reserved id for the browser's Web Speech API; other ids are server
+// voices (VOICEVOX style ids like "2", Kokoro voice names like "af_heart").
+export const BROWSER_SPEAKER_ID = 'browser';
+
 export interface Speaker {
-  id: number;
+  id: string;
   name: string;
   style: string;
   display_name: string;
@@ -9,25 +13,24 @@ export interface Speaker {
 
 interface SpeakersResponse {
   speakers: Speaker[];
-  default_speaker_id: number;
+  default_speaker_id: string;
 }
 
 interface UseTTSReturn {
   speakers: Speaker[];
-  selectedSpeakerId: number;
+  selectedSpeakerId: string;
   isLoading: boolean;
   error: string | null;
-  setSelectedSpeakerId: (id: number) => void;
+  setSelectedSpeakerId: (id: string) => void;
 }
 
 const storageKey = (languageCode: string) => `nihongo-dojo-tts-speaker:${languageCode}`;
 
 export function useTTS(languageCode = 'ja'): UseTTSReturn {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
-  const [selectedSpeakerId, setSelectedSpeakerIdState] = useState<number>(() => {
-    const stored = localStorage.getItem(storageKey(languageCode));
-    return stored ? parseInt(stored, 10) : 2; // Default to Shikoku Metan
-  });
+  const [selectedSpeakerId, setSelectedSpeakerIdState] = useState<string>(
+    () => localStorage.getItem(storageKey(languageCode)) || BROWSER_SPEAKER_ID
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,9 +49,12 @@ export function useTTS(languageCode = 'ja'): UseTTSReturn {
         const data: SpeakersResponse = await response.json();
         setSpeakers(data.speakers);
 
-        // If stored speaker doesn't exist in available speakers, use default
+        // Apply this language's stored speaker; fall back to the default
+        // when nothing is stored or the stored speaker no longer exists
         const stored = localStorage.getItem(storageKey(languageCode));
-        if (!stored || !data.speakers.some((s) => s.id === parseInt(stored, 10))) {
+        if (stored && data.speakers.some((s) => s.id === stored)) {
+          setSelectedSpeakerIdState(stored);
+        } else {
           setSelectedSpeakerIdState(data.default_speaker_id);
         }
 
@@ -56,9 +62,9 @@ export function useTTS(languageCode = 'ja'): UseTTSReturn {
       } catch (err) {
         // Fallback to Web Speech API
         setSpeakers([
-          { id: 0, name: 'Browser TTS', style: 'Default', display_name: 'Web Speech API (Fallback)' },
+          { id: BROWSER_SPEAKER_ID, name: 'Browser TTS', style: 'Default', display_name: 'Web Speech API (Fallback)' },
         ]);
-        setSelectedSpeakerIdState(0);
+        setSelectedSpeakerIdState(BROWSER_SPEAKER_ID);
         setError(null);
       } finally {
         setIsLoading(false);
@@ -68,9 +74,9 @@ export function useTTS(languageCode = 'ja'): UseTTSReturn {
     fetchSpeakers();
   }, [languageCode]);
 
-  const setSelectedSpeakerId = useCallback((id: number) => {
+  const setSelectedSpeakerId = useCallback((id: string) => {
     setSelectedSpeakerIdState(id);
-    localStorage.setItem(storageKey(languageCode), id.toString());
+    localStorage.setItem(storageKey(languageCode), id);
   }, [languageCode]);
 
   return {

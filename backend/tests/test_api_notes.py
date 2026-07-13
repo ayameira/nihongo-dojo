@@ -132,15 +132,15 @@ class TestFactsLanguageRooms:
 
         async_session.add_all([
             StudentFact(content="Japanese fact", source="listener", language_code="ja"),
-            StudentFact(content="Spanish fact", source="listener", language_code="es"),
+            StudentFact(content="French fact", source="listener", language_code="fr"),
         ])
         await async_session.commit()
 
-        response = await test_client.get("/api/notes/facts", params={"language_code": "es"})
+        response = await test_client.get("/api/notes/facts", params={"language_code": "fr"})
 
         assert response.status_code == 200
         contents = [f["content"] for f in response.json()["facts"]]
-        assert contents == ["Spanish fact"]
+        assert contents == ["French fact"]
 
     @pytest.mark.asyncio
     async def test_no_filter_returns_all_facts(self, test_client: AsyncClient, async_session):
@@ -148,7 +148,7 @@ class TestFactsLanguageRooms:
 
         async_session.add_all([
             StudentFact(content="Japanese fact", source="listener", language_code="ja"),
-            StudentFact(content="Spanish fact", source="listener", language_code="es"),
+            StudentFact(content="French fact", source="listener", language_code="fr"),
         ])
         await async_session.commit()
 
@@ -161,15 +161,15 @@ class TestFactsLanguageRooms:
     async def test_manual_fact_is_stored_in_its_room(self, test_client: AsyncClient):
         response = await test_client.post(
             "/api/notes/facts",
-            json={"content": "Prefers formal Spanish", "language_code": "es"},
+            json={"content": "Prefers formal French", "language_code": "fr"},
         )
 
         assert response.status_code == 200
-        assert response.json()["language_code"] == "es"
+        assert response.json()["language_code"] == "fr"
 
-        es_facts = await test_client.get("/api/notes/facts", params={"language_code": "es"})
+        fr_facts = await test_client.get("/api/notes/facts", params={"language_code": "fr"})
         ja_facts = await test_client.get("/api/notes/facts", params={"language_code": "ja"})
-        assert [f["content"] for f in es_facts.json()["facts"]] == ["Prefers formal Spanish"]
+        assert [f["content"] for f in fr_facts.json()["facts"]] == ["Prefers formal French"]
         assert ja_facts.json()["facts"] == []
 
     @pytest.mark.asyncio
@@ -180,7 +180,7 @@ class TestFactsLanguageRooms:
         )
         second = await test_client.post(
             "/api/notes/facts",
-            json={"content": "Name: Aya", "language_code": "es"},
+            json={"content": "Name: Aya", "language_code": "fr"},
         )
 
         assert first.status_code == 200

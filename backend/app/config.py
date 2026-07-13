@@ -111,10 +111,12 @@ class Settings(BaseSettings):
     # the app's existing behavior.
     target_language_code: str = "ja"
 
-    # TTS (VOICEVOX)
+    # TTS servers: VOICEVOX speaks Japanese, Kokoro-FastAPI speaks
+    # English and French. Both are optional user-run local servers.
     voicevox_url: str = "http://127.0.0.1:50021"
+    kokoro_url: str = "http://127.0.0.1:8880"
     tts_cache_dir: str = "./audio_cache"
-    default_speaker_id: int = 2  # Shikoku Metan - Normal Style
+    default_speaker_id: int = 2  # VOICEVOX: Shikoku Metan - Normal Style
 
     # Cost tracking (auto-set from model, but can be overridden)
     cost_limit_weekly: float = 10.0

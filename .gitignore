@@ -6,10 +6,17 @@ dist/
 src-tauri/target/
 
 # Data files (user-specific)
+# The runtime database holds chat history and student facts. It is created and
+# grammar-seeded on first launch, so it is never committed.
 *.db
-!backend/nihongo_dojo.db
 *.anki2
+*.anki2-shm
+*.anki2-wal
 temp_*.anki2
+
+# Personal study notes
+CLASS_NOTES.md
+STUDENT_RECORD.md
 
 # Environment
 .env
@@ -41,3 +48,6 @@ logs/
 
 # TTS Audio Cache
 audio_cache/
+
+# Generated screenshots
+tanuki-screenshots/

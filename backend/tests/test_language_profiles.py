@@ -23,71 +23,77 @@ def test_unknown_language_falls_back_to_japanese():
 
 def test_registry_includes_generic_profiles():
     codes = [profile.code for profile in list_language_profiles()]
-    assert codes == ["ja", "es", "fr", "ko", "zh"]
+    assert codes == ["ja", "en", "fr"]
 
 
-def test_only_japanese_supports_server_tts():
+def test_tts_engine_assignments():
+    assert get_language_profile("ja").tts_engine == "voicevox"
+    assert get_language_profile("en").tts_engine == "kokoro"
+    assert get_language_profile("fr").tts_engine == "kokoro"
     assert get_language_profile("ja").supports_server_tts
-    for code in ("es", "fr", "ko", "zh"):
-        assert not get_language_profile(code).supports_server_tts
 
 
 def test_generic_profiles_parameterize_prompts():
-    es = get_language_profile("es")
+    fr = get_language_profile("fr")
 
-    assert "You are a Spanish language tutor." in es.tutor_prompt_template
-    assert "existing CEFR point" in es.listener_prompt_template
-    assert "Japanese" not in es.tutor_prompt_template
+    assert "You are a French language tutor." in fr.tutor_prompt_template
+    assert "existing CEFR point" in fr.listener_prompt_template
+    assert "Japanese" not in fr.tutor_prompt_template
 
     # Runtime placeholders must survive the language parameterization.
-    es.tutor_prompt_template.format(
+    fr.tutor_prompt_template.format(
         today="2026-07-06",
         student_facts_formatted="f",
         session_summary="s",
         vocab_list_formatted="v",
         grammar_list_formatted="g",
     )
-    es.memory_compaction_prompt_template.format(current_summary="c", messages_chunk="m")
-    es.grammar_assessment_prompt_template.format(grammar_points="g", excerpts="e")
-    es.session_title_prompt_template.format(message_preview="m")
+    fr.memory_compaction_prompt_template.format(current_summary="c", messages_chunk="m")
+    fr.grammar_assessment_prompt_template.format(grammar_points="g", excerpts="e")
+    fr.session_title_prompt_template.format(message_preview="m")
 
 
-def test_spanish_profile_stores_word_in_reading_slot():
-    es = get_language_profile("es")
+def test_french_profile_stores_word_in_reading_slot():
+    fr = get_language_profile("fr")
 
-    normalized = es.normalize_vocab_fields("hola", "", "hello")
+    normalized = fr.normalize_vocab_fields("bonjour", "", "hello")
 
     assert normalized["term"] is None
-    assert normalized["reading"] == "hola"
-    assert es.format_vocab_item(normalized) == "- hola"
-    assert not es.has_secondary_script
+    assert normalized["reading"] == "bonjour"
+    assert fr.format_vocab_item(normalized) == "- bonjour"
+    assert not fr.has_secondary_script
 
 
-def test_korean_profile_detects_hangul():
-    ko = get_language_profile("ko")
+def test_english_profile_stores_word_in_reading_slot():
+    en = get_language_profile("en")
 
-    assert ko.has_reading_script("안녕하세요")
-    assert not ko.has_reading_script("hello")
-    assert ko.normalize_vocab_fields("안녕", "", "hi")["reading"] == "안녕"
+    normalized = en.normalize_vocab_fields("serendipity", "", "a fortunate accident")
 
-
-def test_mandarin_profile_keeps_hanzi_and_pinyin():
-    zh = get_language_profile("zh")
-
-    normalized = zh.normalize_vocab_fields("你好", "ni hao", "hello")
-
-    assert normalized["term"] == "你好"
-    assert normalized["reading"] == "ni hao"
-    assert zh.grammar_level_scheme.levels[0] == "HSK1"
-    assert zh.has_secondary_script
+    assert normalized["term"] is None
+    assert normalized["reading"] == "serendipity"
+    assert en.format_vocab_item(normalized) == "- serendipity"
+    assert not en.has_secondary_script
 
 
-def test_spanish_mapping_suggestion_uses_field_names():
-    es = get_language_profile("es")
+def test_english_mapping_treats_english_field_as_word_not_meaning():
+    en = get_language_profile("en")
 
-    suggestion = es.suggest_anki_mapping(
+    suggestion = en.suggest_anki_mapping(
+        ["English", "Definition"],
+        {"English": ["run", "beautiful"], "Definition": ["to move fast", "pleasing to look at"]},
+    )
+
+    assert suggestion["kana_field"] == "English"
+    assert suggestion["meaning_field"] == "Definition"
+    assert suggestion["kanji_field"] is None
+
+
+def test_french_mapping_suggestion_uses_field_names():
+    fr = get_language_profile("fr")
+
+    suggestion = fr.suggest_anki_mapping(
         ["Word", "Meaning"],
-        {"Word": ["hola", "adiós"], "Meaning": ["hello", "goodbye"]},
+        {"Word": ["bonjour", "au revoir"], "Meaning": ["hello", "goodbye"]},
     )
 
     assert suggestion["kana_field"] == "Word"

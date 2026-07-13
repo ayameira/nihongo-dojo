@@ -3,6 +3,7 @@ import { useChat } from '../hooks/useChat';
 import type { Fact } from '../hooks/useFacts';
 import { ChatComposer } from './chat/ChatComposer';
 import { MessageList } from './chat/MessageList';
+import { DropdownSelect } from './DropdownSelect';
 import type { LanguageProfile } from '../hooks/useLanguageProfiles';
 
 interface ChatProps {
@@ -18,7 +19,7 @@ interface ChatProps {
   languageProfiles?: LanguageProfile[];
   activeTargetLanguageCode?: string;
   onActiveTargetLanguageChange?: (code: string) => void;
-  selectedSpeakerId?: number;
+  selectedSpeakerId?: string;
   onRefreshSessions?: () => Promise<void>;
   openProfileRequest?: number;
   openChatRequest?: number;
@@ -200,9 +201,9 @@ export const Chat: React.FC<ChatProps> = ({
     };
   }, [isLoading, onRefreshFacts, onRefreshSessions]);
 
-  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedModel(e.target.value);
-    localStorage.setItem(MODEL_STORAGE_KEY, e.target.value);
+  const handleModelChange = (value: string) => {
+    setSelectedModel(value);
+    localStorage.setItem(MODEL_STORAGE_KEY, value);
   };
 
   // Facts editing handlers
@@ -282,46 +283,35 @@ export const Chat: React.FC<ChatProps> = ({
 
         <div className="header-right">
           {languageProfiles.length > 1 && onActiveTargetLanguageChange && (
-            <label className="model-selector" title="Target language workspace" data-tutorial-target="language-select">
-              <span className="model-selector-label">Language</span>
-              <select
-                aria-label="Target language"
-                value={activeTargetLanguageCode}
-                onChange={(event) => onActiveTargetLanguageChange(event.target.value)}
-                className="model-select"
-                disabled={isLoading}
-              >
-                {languageProfiles.map(profile => (
-                  <option key={profile.code} value={profile.code}>
-                    {profile.display_name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DropdownSelect
+              label="Language"
+              ariaLabel="Target language"
+              title="Target language workspace"
+              tutorialTarget="language-select"
+              value={activeTargetLanguageCode}
+              onChange={onActiveTargetLanguageChange}
+              disabled={isLoading}
+              options={languageProfiles.map(profile => ({
+                value: profile.code,
+                label: profile.display_name,
+              }))}
+            />
           )}
 
           {availableModels.length > 0 && (
-            <label className="model-selector" title="Chat model">
-              <span className="model-selector-label">Model</span>
-              <select
-                aria-label="Chat model"
-                value={selectedModel}
-                onChange={handleModelChange}
-                className="model-select"
-                disabled={isLoading}
-              >
-                {availableModels.map(model => (
-                  <option
-                    key={getModelKey(model)}
-                    value={getModelKey(model)}
-                    disabled={model.configured === false}
-                  >
-                    {model.provider_name ? `${model.provider_name}: ` : ''}{model.name}
-                    {model.configured === false ? ' (key needed)' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DropdownSelect
+              label="Model"
+              ariaLabel="Chat model"
+              title="Chat model"
+              value={selectedModel}
+              onChange={handleModelChange}
+              disabled={isLoading}
+              options={availableModels.map(model => ({
+                value: getModelKey(model),
+                label: `${model.provider_name ? `${model.provider_name}: ` : ''}${model.name}${model.configured === false ? ' (key needed)' : ''}`,
+                disabled: model.configured === false,
+              }))}
+            />
           )}
 
           {pendingFeedback && (

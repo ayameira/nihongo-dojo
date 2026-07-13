@@ -1,8 +1,10 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
+import { BROWSER_SPEAKER_ID } from '../hooks/useTTS';
+import { cleanTextForSpeech } from '../utils/speechText';
 
 interface AudioPlayerProps {
   text: string;
-  speakerId?: number;
+  speakerId?: string;
   speechLanguage?: string;
   languageCode?: string;
 }
@@ -17,6 +19,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechText = useMemo(() => cleanTextForSpeech(text), [text]);
 
   const handleClick = useCallback(async () => {
     if (isLoading) return;
@@ -33,8 +36,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     setError(null);
 
     // Use Web Speech API fallback
-    if (speakerId === 0) {
-      const utterance = new SpeechSynthesisUtterance(text);
+    if (speakerId === BROWSER_SPEAKER_ID) {
+      const utterance = new SpeechSynthesisUtterance(speechText);
       utterance.lang = speechLanguage;
       // Fallback voice selection (find a matching target-language voice if available)
       const voices = window.speechSynthesis.getVoices();
@@ -70,7 +73,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text,
+          text: speechText,
           speaker_id: speakerId,
           language_code: languageCode,
         }),
@@ -115,7 +118,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       setError(message);
       setIsLoading(false);
     }
-  }, [text, speakerId, speechLanguage, languageCode, isLoading, isPlaying]);
+  }, [speechText, speakerId, speechLanguage, languageCode, isLoading, isPlaying]);
 
   return (
     <button

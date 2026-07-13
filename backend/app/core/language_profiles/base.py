@@ -48,13 +48,18 @@ class LanguageProfile:
     has_term_script: Callable[[str], bool]
     has_reading_script: Callable[[str], bool]
     is_translation_text: Callable[[str], bool]
-    # Whether VOICEVOX-backed server TTS can speak this language; profiles
-    # without it fall back to the browser's Web Speech API.
-    supports_server_tts: bool = False
+    # Server-side TTS engine for this language: "voicevox" (Japanese) or
+    # "kokoro" (Kokoro-FastAPI). None means only the browser's Web Speech
+    # API is available.
+    tts_engine: Optional[str] = None
     # Whether the language keeps a secondary written form next to the primary
     # one (kanji next to kana, hanzi next to pinyin). Languages without one
     # store the word in the reading slot and hide the term field in the UI.
     has_secondary_script: bool = True
+
+    @property
+    def supports_server_tts(self) -> bool:
+        return self.tts_engine is not None
 
     def format_vocab_item(self, item: Dict[str, Optional[str]]) -> str:
         term = item.get("term") or item.get("kanji") or ""
@@ -174,10 +179,6 @@ def _has_kanji(text: str) -> bool:
 
 def _has_kana(text: str) -> bool:
     return any("\u3040" <= ch <= "\u30ff" for ch in text or "")
-
-
-def _has_hangul(text: str) -> bool:
-    return any("\uac00" <= ch <= "\ud7af" for ch in text or "")
 
 
 def _never(text: str) -> bool:
@@ -366,7 +367,7 @@ JAPANESE_PROFILE = LanguageProfile(
     display_name="Japanese",
     native_name="日本語",
     speech_language="ja-JP",
-    supports_server_tts=True,
+    tts_engine="voicevox",
     tutor_prompt_template=JAPANESE_TUTOR_SYSTEM_PROMPT_TEMPLATE,
     listener_prompt_template=JAPANESE_LISTENER_SYSTEM_PROMPT_TEMPLATE,
     memory_compaction_prompt_template=JAPANESE_COMPACTION_PROMPT_TEMPLATE,
@@ -596,7 +597,7 @@ def _make_profile(
     has_reading_script: Callable[[str], bool] = _is_mostly_latin,
     is_translation_text: Callable[[str], bool] = _is_mostly_latin,
     grammar_seed_file: Optional[Path] = None,
-    supports_server_tts: bool = False,
+    tts_engine: Optional[str] = None,
     has_secondary_script: bool = True,
 ) -> LanguageProfile:
     """Build a profile that uses the generic prompt templates."""
@@ -617,16 +618,17 @@ def _make_profile(
         has_term_script=has_term_script,
         has_reading_script=has_reading_script,
         is_translation_text=is_translation_text,
-        supports_server_tts=supports_server_tts,
+        tts_engine=tts_engine,
         has_secondary_script=has_secondary_script,
     )
 
 
-SPANISH_PROFILE = _make_profile(
-    code="es",
-    display_name="Spanish",
-    native_name="Español",
-    speech_language="es-ES",
+ENGLISH_PROFILE = _make_profile(
+    code="en",
+    display_name="English",
+    native_name="English",
+    speech_language="en-US",
+    tts_engine="kokoro",
     grammar_level_scheme=CEFR_SCHEME,
     vocabulary_semantics=VocabularyDisplaySemantics(
         term_label="word",
@@ -636,8 +638,10 @@ SPANISH_PROFILE = _make_profile(
     ),
     anki_field_hints=AnkiFieldHints(
         term=[],
-        reading=["word", "spanish", "expression", "vocab", "front", "term"],
-        meaning=_MEANING_FIELD_HINTS,
+        reading=["word", "english", "expression", "vocab", "front", "term"],
+        # No "english" here: in an English deck that field holds the word
+        # being learned, not its meaning.
+        meaning=["meaning", "meaning_whitelist", "definition", "translation", "back", "gloss"],
         part_of_speech=_POS_FIELD_HINTS,
     ),
     has_secondary_script=False,
@@ -649,6 +653,7 @@ FRENCH_PROFILE = _make_profile(
     display_name="French",
     native_name="Français",
     speech_language="fr-FR",
+    tts_engine="kokoro",
     grammar_level_scheme=CEFR_SCHEME,
     vocabulary_semantics=VocabularyDisplaySemantics(
         term_label="word",
@@ -666,68 +671,12 @@ FRENCH_PROFILE = _make_profile(
 )
 
 
-KOREAN_PROFILE = _make_profile(
-    code="ko",
-    display_name="Korean",
-    native_name="한국어",
-    speech_language="ko-KR",
-    grammar_level_scheme=GrammarLevelScheme(
-        name="TOPIK",
-        levels=["TOPIK1", "TOPIK2", "TOPIK3", "TOPIK4", "TOPIK5", "TOPIK6"],
-        source_name="topik",
-    ),
-    vocabulary_semantics=VocabularyDisplaySemantics(
-        term_label="word",
-        reading_label="word",
-        meaning_label="meaning",
-        part_of_speech_label="part of speech",
-    ),
-    anki_field_hints=AnkiFieldHints(
-        term=[],
-        reading=["word", "korean", "hangul", "expression", "vocab", "front", "term"],
-        meaning=_MEANING_FIELD_HINTS,
-        part_of_speech=_POS_FIELD_HINTS,
-    ),
-    has_reading_script=_has_hangul,
-    has_secondary_script=False,
-)
-
-
-MANDARIN_PROFILE = _make_profile(
-    code="zh",
-    display_name="Mandarin Chinese",
-    native_name="中文",
-    speech_language="zh-CN",
-    grammar_level_scheme=GrammarLevelScheme(
-        name="HSK",
-        levels=["HSK1", "HSK2", "HSK3", "HSK4", "HSK5", "HSK6"],
-        source_name="hsk",
-    ),
-    vocabulary_semantics=VocabularyDisplaySemantics(
-        term_label="hanzi",
-        reading_label="pinyin",
-        meaning_label="meaning",
-        part_of_speech_label="part of speech",
-    ),
-    anki_field_hints=AnkiFieldHints(
-        term=["hanzi", "characters", "simplified", "traditional", "chinese", "word", "expression", "front"],
-        reading=["pinyin", "reading", "pronunciation"],
-        meaning=_MEANING_FIELD_HINTS,
-        part_of_speech=_POS_FIELD_HINTS,
-    ),
-    # Hanzi share the CJK ideograph range the Japanese kanji detector covers.
-    has_term_script=_has_kanji,
-)
-
-
 _PROFILES: Dict[str, LanguageProfile] = {
     profile.code: profile
     for profile in (
         JAPANESE_PROFILE,
-        SPANISH_PROFILE,
+        ENGLISH_PROFILE,
         FRENCH_PROFILE,
-        KOREAN_PROFILE,
-        MANDARIN_PROFILE,
     )
 }
 

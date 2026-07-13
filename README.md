@@ -1,6 +1,6 @@
 # Nihongo Dojo
 
-Nihongo Dojo is a local language practice app with an AI tutor, long-term learner memory, Anki vocabulary sync, grammar tracking, text-to-speech, and cost tracking. Japanese is the flagship profile, and Spanish, French, Korean, and Mandarin Chinese are also supported through per-language profiles.
+Nihongo Dojo is a local language practice app with an AI tutor, long-term learner memory, Anki vocabulary sync, grammar tracking, text-to-speech, and cost tracking. Japanese is the flagship profile, and English and French are also supported through per-language profiles.
 
 It is built for people who want something more personal than a generic chatbot: the tutor can see what vocabulary and grammar you are studying, remember facts about your goals and preferences, and adapt future practice around that context.
 
@@ -20,15 +20,15 @@ It is still a developer-run local app, not a polished commercial product. If you
 ## What It Does
 
 - Streaming AI chat for language practice.
-- Language profiles for Japanese, Spanish, French, Korean, and Mandarin Chinese, each with its own vocabulary, grammar, and sessions.
+- Language profiles for Japanese, English, and French, each with its own vocabulary, grammar, and sessions.
 - Groq, Gemini, OpenRouter, and other OpenAI-compatible provider support.
 - In-app model selector when multiple providers are configured.
 - Student profile memory for goals, interests, preferences, and recurring mistakes.
 - Anki deck setup wizard with deck selection and field mapping.
 - Vocabulary sidebar with New, Learning, and Mature words.
-- Grammar library organized by level (JLPT N5-N1 ships pre-seeded for Japanese; CEFR/TOPIK/HSK levels for the other profiles), plus custom grammar points.
+- Grammar library organized by level (JLPT N5-N1 ships pre-seeded for Japanese; CEFR levels for the other profiles), plus custom grammar points.
 - Image upload for asking about screenshots, textbook pages, handwriting, or signs.
-- Per-message audio playback with optional VOICEVOX voices.
+- Per-message audio playback with optional VOICEVOX (Japanese) and Kokoro (English/French) voices.
 - Multi-session chat history with automatic conversation summaries.
 - Token and estimated cost dashboard with a weekly budget indicator.
 - Light, dark, and system theme modes.
@@ -57,6 +57,7 @@ Optional:
 | --- | --- |
 | Anki | Lets the tutor use your real study vocabulary |
 | VOICEVOX | Higher-quality Japanese voices |
+| Kokoro-FastAPI | Higher-quality English and French voices |
 
 ## Install
 
@@ -252,6 +253,22 @@ On Windows or Linux, start VOICEVOX manually and use:
 npm run dev
 ```
 
+## Optional: Kokoro (English and French voices)
+
+VOICEVOX only speaks Japanese. For English and French, the app can use a local
+[Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) server the same way:
+start it, and its voices appear in the voice selector for those languages. If it
+is not running, audio playback falls back to browser speech.
+
+The quickest way to run it is Docker:
+
+```bash
+docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest
+```
+
+Keep the default server URL (`http://127.0.0.1:8880`) or override it with
+`KOKORO_URL` in `backend/.env`.
+
 ## Everyday Use
 
 After setup, the normal flow is:
@@ -282,7 +299,8 @@ All backend settings live in `backend/.env`.
 | `DATABASE_URL` | `sqlite+aiosqlite:///./nihongo_dojo.db` | Local SQLite database by default |
 | `ANKI_COLLECTION_PATH` | `~/Library/.../collection.anki2` | Optional legacy/direct Anki sync path |
 | `AI_LOGS_PATH` | `./logs/ai_interactions` | Local request logs for debugging |
-| `VOICEVOX_URL` | `http://127.0.0.1:50021` | Optional TTS server |
+| `VOICEVOX_URL` | `http://127.0.0.1:50021` | Optional Japanese TTS server |
+| `KOKORO_URL` | `http://127.0.0.1:8880` | Optional English/French TTS server (Kokoro-FastAPI) |
 | `TTS_CACHE_DIR` | `./audio_cache` | Local generated audio cache |
 | `DEFAULT_SPEAKER_ID` | `2` | Default VOICEVOX speaker/style ID |
 | `COST_LIMIT_WEEKLY` | `10.0` | Weekly budget indicator in USD |
@@ -395,7 +413,7 @@ The frontend uses port `5173`; the backend uses port `8000`. Stop the other proc
 | Backend | FastAPI, SQLAlchemy, SQLite |
 | AI | Gemini plus OpenAI-compatible providers such as Groq and OpenRouter |
 | Streaming | Server-sent events |
-| TTS | VOICEVOX and browser speech fallback |
+| TTS | VOICEVOX (Japanese), Kokoro (English/French), and browser speech fallback |
 
 ## License
 

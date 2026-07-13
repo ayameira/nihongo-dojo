@@ -11,7 +11,7 @@ describe('RightSidebar', () => {
     onToggle: vi.fn(),
     onBudgetClick: vi.fn(),
     speakers: [],
-    selectedSpeakerId: 0,
+    selectedSpeakerId: 'browser',
     onSpeakerChange: vi.fn(),
     ttsError: null,
   };
@@ -183,25 +183,63 @@ describe('RightSidebar', () => {
     });
   });
 
-  describe('quote rotation', () => {
-    it('displays a Japanese quote', () => {
+  describe('quotes per language', () => {
+    it('displays a Japanese quote with translation by default', () => {
       render(<RightSidebar {...defaultProps} />);
 
       // Should show one of the quotes
-      const quoteJp = document.querySelector('.quote-jp');
-      expect(quoteJp).toBeInTheDocument();
-      expect(quoteJp?.textContent).toBeTruthy();
+      const quoteText = document.querySelector('.quote-text');
+      expect(quoteText).toBeInTheDocument();
+      expect(quoteText?.textContent).toBeTruthy();
+      expect(document.querySelector('.quote-translation')?.textContent).toBeTruthy();
+      // Japanese authors show both native and Latin names
+      expect(document.querySelector('.quote-author-en')).toBeInTheDocument();
     });
 
-    it('rotates quotes every 30 seconds', () => {
+    it('displays a French quote with English translation', () => {
+      render(<RightSidebar {...defaultProps} languageCode="fr" />);
+
+      const quoteText = document.querySelector('.quote-text');
+      expect(quoteText?.textContent).toBeTruthy();
+      expect(document.querySelector('.quote-translation')?.textContent).toBeTruthy();
+      // French author names have no separate native-script line
+      expect(document.querySelector('.quote-author-en')).not.toBeInTheDocument();
+    });
+
+    it('displays an English quote without a translation line', () => {
+      render(<RightSidebar {...defaultProps} languageCode="en" />);
+
+      const quoteText = document.querySelector('.quote-text');
+      expect(quoteText?.textContent).toBeTruthy();
+      expect(document.querySelector('.quote-translation')).not.toBeInTheDocument();
+    });
+
+    it('hides the quote section for languages without a collection', () => {
+      render(<RightSidebar {...defaultProps} languageCode="es" />);
+
+      expect(document.querySelector('.quote-section')).not.toBeInTheDocument();
+    });
+
+    it('re-rolls the quote when the language changes', () => {
+      const { rerender } = render(<RightSidebar {...defaultProps} languageCode="ja" />);
+
+      rerender(<RightSidebar {...defaultProps} languageCode="fr" />);
+
+      const quoteText = document.querySelector('.quote-text');
+      expect(quoteText?.textContent).toBeTruthy();
+      // French quotes are Latin-script, so no native author line is shown
+      expect(document.querySelector('.quote-author-en')).not.toBeInTheDocument();
+    });
+
+    it('rotates quotes on an interval', () => {
       render(<RightSidebar {...defaultProps} />);
 
-      const initialQuote = document.querySelector('.quote-jp')?.textContent;
+      const initialQuote = document.querySelector('.quote-text')?.textContent;
       expect(initialQuote).toBeDefined(); // Use initialQuote to satisfy TS
 
-      // Advance time by 30 seconds
+      // Advance past the 45-second rotation interval
       act(() => {
-        vi.advanceTimersByTime(30000);
+        vi.advanceTimersByTime(45000);
       });
 
       // Note: Quote might be the same if random selection hits same index

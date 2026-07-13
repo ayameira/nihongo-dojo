@@ -37,13 +37,13 @@ class TestListSessions:
     async def test_filters_sessions_by_language(self, test_client):
         """Each language room only lists its own sessions."""
         await test_client.post("/api/sessions", json={"id": "ja_room", "language_code": "ja"})
-        await test_client.post("/api/sessions", json={"id": "es_room", "language_code": "es"})
+        await test_client.post("/api/sessions", json={"id": "fr_room", "language_code": "fr"})
 
-        response = await test_client.get("/api/sessions", params={"language_code": "es"})
+        response = await test_client.get("/api/sessions", params={"language_code": "fr"})
 
         assert response.status_code == 200
         ids = [s["id"] for s in response.json()]
-        assert ids == ["es_room"]
+        assert ids == ["fr_room"]
 
 
 class TestCreateSession:
@@ -98,11 +98,11 @@ class TestCreateSession:
         """Registered non-Japanese profiles are stored as-is."""
         response = await test_client.post(
             "/api/sessions",
-            json={"id": "spanish_session", "language_code": "es"},
+            json={"id": "french_session", "language_code": "fr"},
         )
 
         assert response.status_code == 200
-        assert response.json()["language_code"] == "es"
+        assert response.json()["language_code"] == "fr"
 
     @pytest.mark.asyncio
     async def test_session_has_timestamps(self, test_client):

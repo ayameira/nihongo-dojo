@@ -12,7 +12,7 @@ interface MessageListProps {
   currentAction: AgentAction | null;
   isAtBottom: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement>;
-  selectedSpeakerId?: number;
+  selectedSpeakerId?: string;
   speechLanguage?: string;
   languageCode?: string;
   pendingFeedback: DifficultyFeedback | null;
@@ -114,7 +114,7 @@ const UserMessage: React.FC<{ message: Message }> = React.memo(({ message }) => 
 
 const AssistantMessage: React.FC<{
   message: Message;
-  selectedSpeakerId?: number;
+  selectedSpeakerId?: string;
   speechLanguage?: string;
   languageCode?: string;
   pendingFeedback: DifficultyFeedback | null;
@@ -175,7 +175,7 @@ const AssistantMessage: React.FC<{
 const MessageRow: React.FC<{
   message: Message;
   previousMessage?: Message;
-  selectedSpeakerId?: number;
+  selectedSpeakerId?: string;
   speechLanguage?: string;
   languageCode?: string;
   pendingFeedback: DifficultyFeedback | null;
